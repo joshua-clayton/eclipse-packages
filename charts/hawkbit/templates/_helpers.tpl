@@ -65,3 +65,14 @@ Return the secret with the Hawkbit credentials.
     {{ printf "%s" (include "hawkbit.fullname" .) -}}
   {{- end -}}
 {{- end -}}
+
+{{- define "hawkbit.ingressDefaultPaths" -}}
+- path: "/rest"
+  service: {{ include "hawkbit.fullname" . }}
+- path: "/swagger-ui"
+  service: {{ include "hawkbit.fullname" . }}
+- path: "/v3"
+  service: {{ include "hawkbit.fullname" . }}
+- path: "/"
+  service: {{ include "hawkbit.fullname" . }}-simple-ui
+{{- end -}}
