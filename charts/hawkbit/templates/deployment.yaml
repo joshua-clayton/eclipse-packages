@@ -82,9 +82,9 @@ spec:
                 secretKeyRef:
                   name: {{ include "rabbitmq.secretPasswordName" .Subcharts.rabbitmq }}
                   key: rabbitmq-password
-            - name: SPRING_SECURITY_USER_NAME
+            - name: HAWKBIT_SECURITY_USER_NAME
               value: "{{ .Values.auth.username }}"
-            - name: SPRING_SECURITY_USER_PASSWORD
+            - name: HAWKBIT_SECURITY_USER_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "hawkbit.secretName" . }}
