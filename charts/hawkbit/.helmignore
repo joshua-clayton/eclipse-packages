@@ -20,5 +20,4 @@
 .idea/
 *.tmproj
 .vscode/
-# Packaged chart tarballs
-*.tgz
+output/
