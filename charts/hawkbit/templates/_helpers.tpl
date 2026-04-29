@@ -153,3 +153,28 @@ Database helpers — switch between externalDatabase and the bundled mariadb sub
     {{- "mysql" -}}
   {{- end -}}
 {{- end -}}
+
+{{/*
+Environment variables shared by all hawkbit containers (init and application).
+All vars are either used by both or safely ignored by whichever doesn't need them.
+Appends .Values.extraEnv (must be a list of k8s env var objects) when set.
+*/}}
+{{- define "hawkbit.env" -}}
+- name: PROFILES
+  value: {{ include "hawkbit.spring.profiles" . | quote }}
+- name: SPRING_DATASOURCE_URL
+  value: {{ include "hawkbit.database.url" . | quote }}
+- name: SPRING_FLYWAY_ENABLED
+  value: "false"
+{{- if .Values.fileStorage.enabled }}
+- name: ORG_ECLIPSE_HAWKBIT_ARTIFACT_FS_PATH
+  value: {{ .Values.fileStorage.mountPath }}
+{{- end }}
+{{- with .Values.extraEnv }}
+{{- if kindIs "slice" . }}
+{{- toYaml . | nindent 0 }}
+{{- else }}
+{{- fail (printf "extraEnv must be a list of env var objects (got %s). See values.yaml for the supported format." (kindOf .)) }}
+{{- end }}
+{{- end }}
+{{- end -}}

@@ -32,12 +32,7 @@ spec:
           image: "{{ .Values.image.initContainer }}:{{ .Values.microservices.mgmt.image.tag }}"
           imagePullPolicy: {{ .Values.microservices.mgmt.image.pullPolicy }}
           env:
-            - name: HAWKBIT_DB_MODE
-              value: "migrate"
-            - name: PROFILES
-              value: {{ include "hawkbit.spring.profiles" . | quote }}
-            - name: AND_THEN
-              value: "true"
+            {{- include "hawkbit.env" . | nindent 12 }}
           envFrom:
             - secretRef:
                 name: {{ include "hawkbit.dbCredentialsSecretName" . }}
@@ -59,24 +54,7 @@ spec:
           image: "{{ .Values.microservices.mgmt.image.repository }}:{{ .Values.microservices.mgmt.image.tag }}"
           imagePullPolicy: {{ .Values.microservices.mgmt.image.pullPolicy }}
           env:
-            - name: PROFILES
-              value: {{ include "hawkbit.spring.profiles" . | quote }}
-            - name: SPRING_FLYWAY_ENABLED
-              value: "false"
-            {{- if .Values.fileStorage.enabled }}
-            - name: ORG_ECLIPSE_HAWKBIT_ARTIFACT_FS_PATH
-              value: {{ .Values.fileStorage.mountPath }}
-            {{- end }}
-            {{- if .Values.extraEnv }}
-            {{- if kindIs "slice" .Values.extraEnv }}
-            {{- toYaml .Values.extraEnv | nindent 12 }}
-            {{- else if kindIs "map" .Values.extraEnv }}
-            {{- range $key, $value := .Values.extraEnv }}
-            - name: "{{ $key }}"
-              value: "{{ $value }}"
-            {{- end }}
-            {{- end }}
-            {{- end }}
+            {{- include "hawkbit.env" . | nindent 12 }}
           envFrom:
             - secretRef:
                 name: {{ include "hawkbit.dbCredentialsSecretName" . }}

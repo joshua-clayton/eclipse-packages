@@ -32,12 +32,7 @@ spec:
           image: "{{ .Values.image.initContainer }}:{{ .Values.microservices.dmf.image.tag }}"
           imagePullPolicy: {{ .Values.microservices.dmf.image.pullPolicy }}
           env:
-            - name: HAWKBIT_DB_MODE
-              value: "migrate"
-            - name: PROFILES
-              value: {{ include "hawkbit.spring.profiles" . | quote }}
-            - name: AND_THEN
-              value: "true"
+            {{- include "hawkbit.env" . | nindent 12 }}
           envFrom:
             - secretRef:
                 name: {{ include "hawkbit.dbCredentialsSecretName" . }}
@@ -52,10 +47,7 @@ spec:
           image: "{{ .Values.microservices.dmf.image.repository }}:{{ .Values.microservices.dmf.image.tag }}"
           imagePullPolicy: {{ .Values.microservices.dmf.image.pullPolicy }}
           env:
-            - name: PROFILES
-              value: {{ include "hawkbit.spring.profiles" . | quote }}
-            - name: SPRING_FLYWAY_ENABLED
-              value: "false"
+            {{- include "hawkbit.env" . | nindent 12 }}
           envFrom:
             - secretRef:
                 name: {{ include "hawkbit.dbCredentialsSecretName" . }}

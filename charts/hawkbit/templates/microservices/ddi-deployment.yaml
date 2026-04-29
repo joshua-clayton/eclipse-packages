@@ -32,12 +32,7 @@ spec:
           image: "{{ .Values.image.initContainer }}:{{ .Values.microservices.ddi.image.tag }}"
           imagePullPolicy: {{ .Values.microservices.ddi.image.pullPolicy }}
           env:
-            - name: HAWKBIT_DB_MODE
-              value: "migrate"
-            - name: PROFILES
-              value: {{ include "hawkbit.spring.profiles" . | quote }}
-            - name: AND_THEN
-              value: "true"
+            {{- include "hawkbit.env" . | nindent 12 }}
           envFrom:
             - secretRef:
                 name: {{ include "hawkbit.dbCredentialsSecretName" . }}
@@ -52,14 +47,7 @@ spec:
           image: "{{ .Values.microservices.ddi.image.repository }}:{{ .Values.microservices.ddi.image.tag }}"
           imagePullPolicy: {{ .Values.microservices.ddi.image.pullPolicy }}
           env:
-            - name: PROFILES
-              value: {{ include "hawkbit.spring.profiles" . | quote }}
-            - name: SPRING_FLYWAY_ENABLED
-              value: "false"
-            {{- if .Values.fileStorage.enabled }}
-            - name: ORG_ECLIPSE_HAWKBIT_ARTIFACT_FS_PATH
-              value: {{ .Values.fileStorage.mountPath }}
-            {{- end }}
+            {{- include "hawkbit.env" . | nindent 12 }}
           envFrom:
             - secretRef:
                 name: {{ include "hawkbit.dbCredentialsSecretName" . }}
