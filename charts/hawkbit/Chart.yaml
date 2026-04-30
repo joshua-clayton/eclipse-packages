@@ -10,7 +10,7 @@
 # SPDX-License-Identifier: EPL-2.0
 ---
 apiVersion: v2
-version: 1.7.1-alpha22
+version: 1.7.1-alpha15a
 appVersion: "0.10.0"
 description: |
    Eclipse hawkBit™ is a domain independent back-end framework for rolling out software updates
