@@ -32,11 +32,11 @@ maintainers:
 - name: ctron
   email: ctron@dentrassi.de
 dependencies:
-- name: mariadb
-  version: ^0.x
-  repository: "oci://registry-1.docker.io/cloudpirates"
-  condition: mariadb.enabled
+- name: mysql
+  version: ^9.x
+  repository: "oci://registry-1.docker.io/bitnamicharts"
+  condition: mysql.enabled
 - name: rabbitmq
-  version: ^0.x
-  repository: "oci://registry-1.docker.io/cloudpirates"
+  version: ^10.x
+  repository: "oci://registry-1.docker.io/bitnamicharts"
   condition: rabbitmq.enabled
