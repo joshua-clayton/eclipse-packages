@@ -1,0 +1,951 @@
+---
+# Source: hawkbit/charts/rabbitmq/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hawkbit-int-rabbitmq-config
+  namespace: hawkbit
+  labels:
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: rabbitmq
+    app.kubernetes.io/version: 4.3.0
+    helm.sh/chart: rabbitmq-0.21.3
+data:
+  rabbitmq.conf: |
+    # Default RabbitMQ configuration
+    loopback_users.guest = false
+    listeners.tcp.default = 5672
+    # Management plugin options
+    management.tcp.port = 15672
+    # Prometheus metrics
+    prometheus.tcp.port = 15692
+
+    # Logging configuration
+    log.console = true
+    log.console.level = info
+    log.file = false
+  enabled_plugins: |
+    [rabbitmq_management,rabbitmq_prometheus].
+---
+# Source: hawkbit/templates/configmap.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: hawkbit-int
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/version: "0.10.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  application.yaml: |-
+    hawkbit:
+      security:
+        user:
+          admin:
+            roles:
+            - TENANT_ADMIN
+            tenant: DEFAULT
+          hawkbit:
+            password: '{noop}isAwesome'
+            roles: TENANT_ADMIN
+            tenant: DEFAULT
+      server:
+        security:
+          dos:
+            maxArtifactSize: 10737418240
+    server:
+      useForwardHeaders: true
+    spring:
+      cloud:
+        stream:
+          bindings:
+            default:
+              group: hawkbit
+            device-created:
+              destination: device-registry.device-created
+            device-deleted:
+              destination: device-registry.device-deleted
+            device-updated:
+              destination: device-registry.device-updated
+      config:
+        import:
+        - optional:file:/secret-config/application-user-credentials.yaml
+      rabbitmq:
+        host: hawkbit-int-rabbitmq
+        listener:
+          simple:
+            missing-queues-fatal: false
+      servlet:
+        multipart:
+          file-size-threshold: 1MB
+          max-file-size: 10GB
+          max-request-size: 10GB
+---
+# Source: hawkbit/templates/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: hawkbit-int-data
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/version: "0.10.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 200Gi
+---
+# Source: hawkbit/charts/rabbitmq/templates/service-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: hawkbit-int-rabbitmq-headless
+  namespace: hawkbit
+  labels:
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: rabbitmq
+    app.kubernetes.io/version: 4.3.0
+    helm.sh/chart: rabbitmq-0.21.3
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - port: 5672
+      targetPort: amqp
+      name: amqp
+    - port: 4369
+      targetPort: epmd
+      name: epmd
+    - port: 25672
+      targetPort: dist
+      name: dist
+    - port: 15672
+      targetPort: mgmt
+      name: mgmt
+  selector:
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/name: rabbitmq
+---
+# Source: hawkbit/charts/rabbitmq/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: hawkbit-int-rabbitmq
+  namespace: hawkbit
+  labels:
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: rabbitmq
+    app.kubernetes.io/version: 4.3.0
+    helm.sh/chart: rabbitmq-0.21.3
+spec:
+  type: ClusterIP
+  trafficDistribution: 
+  ports:
+    - port: 5672
+      targetPort: amqp
+      name: amqp
+    - port: 15672
+      targetPort: mgmt
+      name: mgmt
+    - port: 15692
+      targetPort: prometheus
+      name: prometheus
+  selector:
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/name: rabbitmq
+---
+# Source: hawkbit/templates/gui-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: hawkbit-int-gui
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/version: "0.10.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: gui
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: hawkbit
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/component: gui
+---
+# Source: hawkbit/templates/microservices/ddi-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: hawkbit-int-ddi
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/version: "0.10.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: ddi
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8081
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: hawkbit
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/component: ddi
+---
+# Source: hawkbit/templates/microservices/mgmt-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: hawkbit-int-mgmt
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/version: "0.10.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mgmt
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: hawkbit
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/component: mgmt
+---
+# Source: hawkbit/templates/gui-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hawkbit-int-gui
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/version: "0.10.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: gui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hawkbit
+      app.kubernetes.io/instance: hawkbit-int
+      app.kubernetes.io/component: gui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hawkbit
+        app.kubernetes.io/instance: hawkbit-int
+        app.kubernetes.io/component: gui
+      annotations:
+        secret.reloader.stakater.com/reload: hawkbit-db-secret,hawkbit-user-secret,hawkbit-gui-secret
+    spec:
+      containers:
+        - name: hawkbitgui
+          image: "ghcr.io/joshua-clayton/hawkbitgui:0.1.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NEXTAUTH_URL
+              value: "https://hawkbitgui.int.lvt.services"
+            - name: NEXTAUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: hawkbit-gui-secret
+                  key: NEXTAUTH_SECRET
+            - name: HAWKBIT_API_URL
+              value: "http://hawkbit-int-mgmt:8080"
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+          resources:
+            {}
+      nodeSelector:
+        karpenter.sh/nodepool: infrastructure
+      tolerations:
+        - effect: NoExecute
+          key: cluster-critical
+          operator: Equal
+          value: "true"
+---
+# Source: hawkbit/templates/microservices/ddi-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hawkbit-int-ddi
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/version: "0.10.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: ddi
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hawkbit
+      app.kubernetes.io/instance: hawkbit-int
+      app.kubernetes.io/component: ddi
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hawkbit
+        app.kubernetes.io/instance: hawkbit-int
+        app.kubernetes.io/component: ddi
+      annotations:
+        checksum/config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        secret.reloader.stakater.com/reload: hawkbit-db-secret,hawkbit-user-secret,hawkbit-gui-secret
+    spec:
+      initContainers:
+        - name: hawkbit-init
+          image: "hawkbit/hawkbit-repository-jpa-init:0.10.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PROFILES
+              value: "mysql"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:mariadb://hawkbit.database.int.aws.lvt.cloud:3306/hawkbit?sslMode=verify-ca&serverSslCert=/etc/ssl/rds/rds-ca-bundle.pem"
+            - name: SPRING_FLYWAY_ENABLED
+              value: "false"
+            - name: ORG_ECLIPSE_HAWKBIT_ARTIFACT_FS_PATH
+              value: /var/lib/hawkbit-storage
+          envFrom:
+            - secretRef:
+                name: hawkbit-db-secret
+          volumeMounts:
+            - name: configmap
+              mountPath: /app/config
+            - name: secret-config
+              mountPath: /secret-config
+              readOnly: true
+      containers:
+        - name: hawkbit-ddi
+          image: "hawkbit/hawkbit-ddi-server:0.10.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PROFILES
+              value: "mysql"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:mariadb://hawkbit.database.int.aws.lvt.cloud:3306/hawkbit?sslMode=verify-ca&serverSslCert=/etc/ssl/rds/rds-ca-bundle.pem"
+            - name: SPRING_FLYWAY_ENABLED
+              value: "false"
+            - name: ORG_ECLIPSE_HAWKBIT_ARTIFACT_FS_PATH
+              value: /var/lib/hawkbit-storage
+          envFrom:
+            - secretRef:
+                name: hawkbit-db-secret
+            - secretRef:
+                name: hawkbit-rabbitmq-secret
+          ports:
+            - name: http
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 240
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 120
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: configmap
+              mountPath: /app/config
+            - name: storage
+              mountPath: /var/lib/hawkbit-storage
+            - name: secret-config
+              mountPath: /secret-config
+              readOnly: true
+            - mountPath: /etc/ssl/rds
+              name: rds-ca-bundle
+              readOnly: true
+          resources:
+            {}
+      nodeSelector:
+        karpenter.sh/nodepool: infrastructure
+      tolerations:
+        - effect: NoExecute
+          key: cluster-critical
+          operator: Equal
+          value: "true"
+      securityContext:
+        fsGroup: 65534
+        runAsUser: 65534
+      volumes:
+        - name: configmap
+          configMap:
+            name: hawkbit-int
+        - name: storage
+          persistentVolumeClaim:
+            claimName: hawkbit-int-data
+        - name: secret-config
+          projected:
+            sources:
+              - secret:
+                  name: hawkbit-user-secret
+                  items:
+                    - key: application-user-credentials.yaml
+                      path: application-user-credentials.yaml
+        - configMap:
+            name: rds-ca-bundle
+          name: rds-ca-bundle
+---
+# Source: hawkbit/templates/microservices/dmf-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hawkbit-int-dmf
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/version: "0.10.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: dmf
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hawkbit
+      app.kubernetes.io/instance: hawkbit-int
+      app.kubernetes.io/component: dmf
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hawkbit
+        app.kubernetes.io/instance: hawkbit-int
+        app.kubernetes.io/component: dmf
+      annotations:
+        checksum/config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        secret.reloader.stakater.com/reload: hawkbit-db-secret,hawkbit-user-secret,hawkbit-gui-secret
+    spec:
+      initContainers:
+        - name: hawkbit-init
+          image: "hawkbit/hawkbit-repository-jpa-init:0.10.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PROFILES
+              value: "mysql"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:mariadb://hawkbit.database.int.aws.lvt.cloud:3306/hawkbit?sslMode=verify-ca&serverSslCert=/etc/ssl/rds/rds-ca-bundle.pem"
+            - name: SPRING_FLYWAY_ENABLED
+              value: "false"
+            - name: ORG_ECLIPSE_HAWKBIT_ARTIFACT_FS_PATH
+              value: /var/lib/hawkbit-storage
+          envFrom:
+            - secretRef:
+                name: hawkbit-db-secret
+          volumeMounts:
+            - name: configmap
+              mountPath: /app/config
+            - name: secret-config
+              mountPath: /secret-config
+              readOnly: true
+      containers:
+        - name: hawkbit-dmf
+          image: "hawkbit/hawkbit-dmf-server:0.10.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PROFILES
+              value: "mysql"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:mariadb://hawkbit.database.int.aws.lvt.cloud:3306/hawkbit?sslMode=verify-ca&serverSslCert=/etc/ssl/rds/rds-ca-bundle.pem"
+            - name: SPRING_FLYWAY_ENABLED
+              value: "false"
+            - name: ORG_ECLIPSE_HAWKBIT_ARTIFACT_FS_PATH
+              value: /var/lib/hawkbit-storage
+          envFrom:
+            - secretRef:
+                name: hawkbit-db-secret
+            - secretRef:
+                name: hawkbit-rabbitmq-secret
+          volumeMounts:
+            - name: configmap
+              mountPath: /app/config
+            - name: secret-config
+              mountPath: /secret-config
+              readOnly: true
+            - mountPath: /etc/ssl/rds
+              name: rds-ca-bundle
+              readOnly: true
+          resources:
+            {}
+      nodeSelector:
+        karpenter.sh/nodepool: infrastructure
+      tolerations:
+        - effect: NoExecute
+          key: cluster-critical
+          operator: Equal
+          value: "true"
+      securityContext:
+        fsGroup: 65534
+        runAsUser: 65534
+      volumes:
+        - name: configmap
+          configMap:
+            name: hawkbit-int
+        - name: secret-config
+          projected:
+            sources:
+              - secret:
+                  name: hawkbit-user-secret
+                  items:
+                    - key: application-user-credentials.yaml
+                      path: application-user-credentials.yaml
+        - configMap:
+            name: rds-ca-bundle
+          name: rds-ca-bundle
+---
+# Source: hawkbit/templates/microservices/mgmt-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hawkbit-int-mgmt
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/version: "0.10.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mgmt
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hawkbit
+      app.kubernetes.io/instance: hawkbit-int
+      app.kubernetes.io/component: mgmt
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hawkbit
+        app.kubernetes.io/instance: hawkbit-int
+        app.kubernetes.io/component: mgmt
+      annotations:
+        checksum/config: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        secret.reloader.stakater.com/reload: hawkbit-db-secret,hawkbit-user-secret,hawkbit-gui-secret
+    spec:
+      initContainers:
+        - name: hawkbit-init
+          image: "hawkbit/hawkbit-repository-jpa-init:0.10.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PROFILES
+              value: "mysql"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:mariadb://hawkbit.database.int.aws.lvt.cloud:3306/hawkbit?sslMode=verify-ca&serverSslCert=/etc/ssl/rds/rds-ca-bundle.pem"
+            - name: SPRING_FLYWAY_ENABLED
+              value: "false"
+            - name: ORG_ECLIPSE_HAWKBIT_ARTIFACT_FS_PATH
+              value: /var/lib/hawkbit-storage
+          envFrom:
+            - secretRef:
+                name: hawkbit-db-secret
+          volumeMounts:
+            - name: configmap
+              mountPath: /app/config
+            - name: secret-config
+              mountPath: /secret-config
+              readOnly: true
+            - mountPath: /etc/ssl/rds
+              name: rds-ca-bundle
+              readOnly: true
+      containers:
+        - name: hawkbit-mgmt
+          image: "hawkbit/hawkbit-mgmt-server:0.10.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PROFILES
+              value: "mysql"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:mariadb://hawkbit.database.int.aws.lvt.cloud:3306/hawkbit?sslMode=verify-ca&serverSslCert=/etc/ssl/rds/rds-ca-bundle.pem"
+            - name: SPRING_FLYWAY_ENABLED
+              value: "false"
+            - name: ORG_ECLIPSE_HAWKBIT_ARTIFACT_FS_PATH
+              value: /var/lib/hawkbit-storage
+          envFrom:
+            - secretRef:
+                name: hawkbit-db-secret
+            - secretRef:
+                name: hawkbit-rabbitmq-secret
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 240
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 120
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: configmap
+              mountPath: /app/config
+            - name: secret-config
+              mountPath: /secret-config
+              readOnly: true
+            - name: storage
+              mountPath: /var/lib/hawkbit-storage
+            - mountPath: /etc/ssl/rds
+              name: rds-ca-bundle
+              readOnly: true
+          resources:
+            {}
+      nodeSelector:
+        karpenter.sh/nodepool: infrastructure
+      tolerations:
+        - effect: NoExecute
+          key: cluster-critical
+          operator: Equal
+          value: "true"
+      securityContext:
+        fsGroup: 65534
+        runAsUser: 65534
+      volumes:
+        - name: configmap
+          configMap:
+            name: hawkbit-int
+        - name: secret-config
+          projected:
+            sources:
+              - secret:
+                  name: hawkbit-user-secret
+                  items:
+                    - key: application-user-credentials.yaml
+                      path: application-user-credentials.yaml
+        - name: storage
+          persistentVolumeClaim:
+            claimName: hawkbit-int-data
+        - configMap:
+            name: rds-ca-bundle
+          name: rds-ca-bundle
+---
+# Source: hawkbit/charts/rabbitmq/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: hawkbit-int-rabbitmq
+  namespace: hawkbit
+  labels:
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: rabbitmq
+    app.kubernetes.io/version: 4.3.0
+    helm.sh/chart: rabbitmq-0.21.3
+spec:
+  serviceName: hawkbit-int-rabbitmq-headless
+  replicas: 1
+  revisionHistoryLimit: 10
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: hawkbit-int
+      app.kubernetes.io/name: rabbitmq
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: hawkbit-int
+        app.kubernetes.io/name: rabbitmq
+    spec:
+      automountServiceAccountToken: false
+      serviceAccountName: default
+      securityContext: 
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: init-erlang-cookie
+          image: "mirror.registry.lvt.tools/library/busybox:1.32"
+          imagePullPolicy: "IfNotPresent"
+          securityContext: 
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 999
+            runAsNonRoot: true
+            runAsUser: 999
+          command:
+            - sh
+            - -c
+            - |
+              echo "$RABBITMQ_ERLANG_COOKIE" > /var/lib/rabbitmq/.erlang.cookie
+              chmod 400 /var/lib/rabbitmq/.erlang.cookie
+              chown $(id -u):$(id -g) /var/lib/rabbitmq/.erlang.cookie
+          env:
+            - name: RABBITMQ_ERLANG_COOKIE
+              valueFrom:
+                secretKeyRef:
+                  name: hawkbit-rabbitmq-secret
+                  key: rabbitmq-erlang-cookie
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+      containers:
+        - name: rabbitmq
+          securityContext: 
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 999
+            runAsNonRoot: true
+            runAsUser: 999
+          image: "mirror.registry.lvt.tools/library/rabbitmq:4.3.0-management"
+          imagePullPolicy: Always
+          ports:
+            - name: amqp
+              containerPort: 5672
+            - name: mgmt
+              containerPort: 15672
+            - name: epmd
+              containerPort: 4369
+            - name: dist
+              containerPort: 25672
+            - name: prometheus
+              containerPort: 15692
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              value: "hawkbit"
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: hawkbit-rabbitmq-secret
+                  key: rabbitmq-password
+            - name: RABBITMQ_ERLANG_COOKIE
+              valueFrom:
+                secretKeyRef:
+                  name: hawkbit-rabbitmq-secret
+                  key: rabbitmq-erlang-cookie
+            - name: RABBITMQ_USE_LONGNAME
+              value: "true"
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: RABBITMQ_NODENAME
+              value: rabbit@$(NODE_NAME).hawkbit-int-rabbitmq-headless.hawkbit.svc.cluster.local
+          livenessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - rabbitmq-diagnostics -q check_running
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 20
+            failureThreshold: 3
+            successThreshold: 1
+          readinessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - rabbitmq-diagnostics -q check_running
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 20
+            failureThreshold: 3
+            successThreshold: 1
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+            - name: config
+              mountPath: /etc/rabbitmq
+            - name: logs
+              mountPath: /var/log/rabbitmq
+      volumes:
+        - name: logs
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: hawkbit-int-rabbitmq-config
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: data
+        labels:
+          app.kubernetes.io/instance: hawkbit-int
+          app.kubernetes.io/name: rabbitmq
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: hawkbit/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: hawkbit-int
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/version: "0.10.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+    alb.ingress.kubernetes.io/group.name: internal
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-FS-1-2-2019-08
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/target-type: ip
+spec:
+  rules:
+    - host: "hawkbit.int.lvt.services"
+      http:
+        paths:
+          - path: /DEFAULT/controller
+            pathType: Prefix
+            backend:
+              service:
+                name: hawkbit-int-ddi
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hawkbit-int-mgmt
+                port:
+                  name: http
+    - host: "hawkbitgui.int.lvt.services"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hawkbit-int-gui
+                port:
+                  name: http
+---
+# Source: hawkbit/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "hawkbit-int-test-connection"
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: curl
+      image: curlimages/curl
+      command: ['curl']
+      args: [
+        "-X", "GET",
+        "-u", "admin:admin",
+        "http://hawkbit-int:80/rest/v1/userinfo"
+      ]
+  restartPolicy: Never
+---
+# Source: hawkbit/templates/db-migrate-hook.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hawkbit-int-db-migrate
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-int
+    app.kubernetes.io/version: "0.10.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hawkbit
+        app.kubernetes.io/instance: hawkbit-int
+        app.kubernetes.io/component: db-migrate
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: db-migrate
+          image: "hawkbit/hawkbit-repository-jpa-init:0.10.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: HAWKBIT_DB_MODE
+              value: "migrate"
+            - name: PROFILES
+              value: "mysql"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:mariadb://hawkbit.database.int.aws.lvt.cloud:3306/hawkbit?sslMode=verify-ca&serverSslCert=/etc/ssl/rds/rds-ca-bundle.pem"
+          envFrom:
+            - secretRef:
+                name: hawkbit-db-secret
+          volumeMounts:
+            - mountPath: /etc/ssl/rds
+              name: rds-ca-bundle
+              readOnly: true
+      volumes:
+        - configMap:
+            name: rds-ca-bundle
+          name: rds-ca-bundle

@@ -1,0 +1,551 @@
+---
+# Source: hawkbit/charts/mariadb/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hawkbit-devops-mariadb
+  namespace: hawkbit
+  labels:
+    app.kubernetes.io/instance: hawkbit-devops
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 12.2.2
+    helm.sh/chart: mariadb-0.16.1
+type: Opaque
+data:
+  mariadb-root-password: "OGs3TnlPM1lxNURHSllWNXBKcWRMS0l5TXNGSXhnNXQ="
+  mariadb-password: "aGF3a2JpdA=="
+  metricsExporterPassword: "QjhzQTVRWEplUDNHSG5LQmpneXg4MHdFUmZCMGRPY0o="
+---
+# Source: hawkbit/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hawkbit-devops-user
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-devops
+    app.kubernetes.io/version: "0.10.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+stringData:
+  application-user-credentials.yaml: |-
+    hawkbit:
+      security:
+        user:
+          admin:
+            password: "{noop}admin"
+---
+# Source: hawkbit/charts/mariadb/templates/metrics-init-script.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: hawkbit-devops-mariadb-init-exporter-user
+  namespace: hawkbit
+  labels:
+    app.kubernetes.io/instance: hawkbit-devops
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 12.2.2
+    helm.sh/chart: mariadb-0.16.1
+data:
+  initMetricsUser.sh: |
+    #!/bin/bash
+    mariadb -uroot -p"${MARIADB_ROOT_PASSWORD}" <<EOF
+    CREATE USER IF NOT EXISTS 'exporter'@'localhost' IDENTIFIED BY '${MYSQLD_EXPORTER_PASSWORD}' WITH MAX_USER_CONNECTIONS 3;
+    GRANT PROCESS, REPLICATION CLIENT, SLAVE MONITOR, SELECT ON *.* TO 'exporter'@'localhost';
+    CREATE USER IF NOT EXISTS 'exporter'@'127.0.0.1' IDENTIFIED BY '${MYSQLD_EXPORTER_PASSWORD}' WITH MAX_USER_CONNECTIONS 3;
+    GRANT PROCESS, REPLICATION CLIENT, SLAVE MONITOR, SELECT ON *.* TO 'exporter'@'127.0.0.1';
+    CREATE USER IF NOT EXISTS 'exporter'@'::1' IDENTIFIED BY '${MYSQLD_EXPORTER_PASSWORD}' WITH MAX_USER_CONNECTIONS 3;
+    GRANT PROCESS, REPLICATION CLIENT, SLAVE MONITOR, SELECT ON *.* TO 'exporter'@'::1';
+    FLUSH PRIVILEGES;
+    EOF
+---
+# Source: hawkbit/templates/configmap.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: hawkbit-devops
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-devops
+    app.kubernetes.io/version: "0.10.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  application.yaml: |-
+    hawkbit:
+      security:
+        user:
+          admin:
+            roles:
+            - TENANT_ADMIN
+            tenant: DEFAULT
+          hawkbit:
+            password: '{noop}isAwesome'
+            roles: TENANT_ADMIN
+            tenant: DEFAULT
+      server:
+        security:
+          dos:
+            maxArtifactSize: 10737418240
+    server:
+      useForwardHeaders: true
+    spring:
+      autoconfigure:
+        exclude: org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
+      config:
+        import:
+        - optional:file:/secret-config/application-user-credentials.yaml
+      servlet:
+        multipart:
+          file-size-threshold: 1MB
+          max-file-size: 10GB
+          max-request-size: 10GB
+---
+# Source: hawkbit/templates/pvc.yaml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: hawkbit-devops-data
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-devops
+    app.kubernetes.io/version: "0.10.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 200Gi
+---
+# Source: hawkbit/charts/mariadb/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: hawkbit-devops-mariadb
+  namespace: hawkbit
+  labels:
+    app.kubernetes.io/instance: hawkbit-devops
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 12.2.2
+    helm.sh/chart: mariadb-0.16.1
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3306
+      targetPort: mysql
+      protocol: TCP
+      name: mysql
+    - port: 9104
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    app.kubernetes.io/instance: hawkbit-devops
+    app.kubernetes.io/name: mariadb
+---
+# Source: hawkbit/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: hawkbit-devops
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-devops
+    app.kubernetes.io/version: "0.10.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: hawkbit
+    app.kubernetes.io/instance: hawkbit-devops
+---
+# Source: hawkbit/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hawkbit-devops
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-devops
+    app.kubernetes.io/version: "0.10.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hawkbit
+      app.kubernetes.io/instance: hawkbit-devops
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hawkbit
+        app.kubernetes.io/instance: hawkbit-devops
+      annotations:
+        checksum/config: adb90071c68aaf3888a02ecf2d6e05eb7e01de26d394e429813a32d5a3ad6b99
+    spec:
+      initContainers:
+        - name: hawkbit-init
+          image: "hawkbit/hawkbit-repository-jpa-init:0.10.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PROFILES
+              value: "mysql"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:mariadb://hawkbit-devops-mariadb:3306/hawkbit"
+            - name: SPRING_FLYWAY_ENABLED
+              value: "false"
+            - name: ORG_ECLIPSE_HAWKBIT_ARTIFACT_FS_PATH
+              value: /var/lib/hawkbit-storage
+            - name: HAWKBIT_SECURITY_USER_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: hawkbit-password
+                  name: hawkbit-secret
+          envFrom:
+            - secretRef:
+                name: hawkbit-devops-db
+          volumeMounts:
+            - name: configmap
+              mountPath: /app/config
+            - name: secret-config
+              mountPath: /secret-config
+              readOnly: true
+      containers:
+        - name: hawkbit
+          image: "hawkbit/hawkbit-update-server:0.10.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PROFILES
+              value: "mysql"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:mariadb://hawkbit-devops-mariadb:3306/hawkbit"
+            - name: SPRING_FLYWAY_ENABLED
+              value: "false"
+            - name: ORG_ECLIPSE_HAWKBIT_ARTIFACT_FS_PATH
+              value: /var/lib/hawkbit-storage
+            - name: HAWKBIT_SECURITY_USER_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: hawkbit-password
+                  name: hawkbit-secret
+          envFrom:
+            - secretRef:
+                name: hawkbit-devops-db
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /swagger-ui/index.html
+              port: http
+            initialDelaySeconds: 240
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /swagger-ui/index.html
+              port: http
+            initialDelaySeconds: 120
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: configmap
+              mountPath: /app/config
+            - name: secret-config
+              mountPath: /secret-config
+              readOnly: true
+            - name: storage
+              mountPath: /var/lib/hawkbit-storage
+          resources:
+            {}
+      nodeSelector:
+        karpenter.sh/nodepool: infrastructure
+      tolerations:
+        - effect: NoExecute
+          key: cluster-critical
+          operator: Equal
+          value: "true"
+      securityContext:
+        fsGroup: 65534
+        runAsUser: 65534
+      volumes:
+        - name: configmap
+          configMap:
+            name: hawkbit-devops
+        - name: secret-config
+          projected:
+            sources:
+              - secret:
+                  name: hawkbit-devops-user
+                  items:
+                    - key: application-user-credentials.yaml
+                      path: application-user-credentials.yaml
+        - name: storage
+          persistentVolumeClaim:
+            claimName: hawkbit-devops-data
+---
+# Source: hawkbit/charts/mariadb/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: hawkbit-devops-mariadb
+  namespace: hawkbit
+  labels:
+    app.kubernetes.io/instance: hawkbit-devops
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/version: 12.2.2
+    helm.sh/chart: mariadb-0.16.1
+spec:
+  replicas: 1
+  serviceName: hawkbit-devops-mariadb
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: hawkbit-devops
+      app.kubernetes.io/name: mariadb
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: hawkbit-devops
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: mariadb
+        app.kubernetes.io/version: 12.2.2
+        helm.sh/chart: mariadb-0.16.1
+    spec:
+      serviceAccountName: default
+      automountServiceAccountToken: false
+      securityContext: 
+        fsGroup: 999
+      initContainers:
+      containers:
+        - name: mariadb
+          image: docker.io/mariadb:12.2.2@sha256:e0236fc6386e7eacd9359e59d0a078bd7aa0d18280d36d13061121bedeaee903
+          imagePullPolicy: Always
+          securityContext: 
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 999
+          env:
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hawkbit-devops-mariadb
+                  key: mariadb-root-password
+            - name: MARIADB_DATABASE
+              value: "hawkbit"
+            - name: MARIADB_USER
+              value: "hawkbit"
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hawkbit-devops-mariadb
+                  key: mariadb-password
+            - name: MYSQLD_EXPORTER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hawkbit-devops-mariadb
+                  key: metricsExporterPassword
+          ports:
+            - name: mysql
+              containerPort: 3306
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - healthcheck.sh --connect --innodb_initialized
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - healthcheck.sh --connect --innodb_initialized
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+            - mountPath: /tmp
+              name: tmp-volume
+            - name: exporter-init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+        - name: metrics
+          image: docker.io/prom/mysqld-exporter:v0.18.0@sha256:2598c0571f383708e19016d119bb45c06128a9ebc962c9f49483278ac5a94c41
+          imagePullPolicy: Always
+          args: 
+            - "--mysqld.username=exporter"
+            - "--mysqld.address=localhost:3306"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+          env: 
+            - name: MYSQLD_EXPORTER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hawkbit-devops-mariadb
+                  key: metricsExporterPassword
+          ports:
+            - name: metrics
+              containerPort: 9104
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+        - name: exporter-init-scripts
+          configMap:
+            name: hawkbit-devops-mariadb-init-exporter-user
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: data
+        labels:
+          app.kubernetes.io/instance: hawkbit-devops
+          app.kubernetes.io/name: mariadb
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: hawkbit/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: hawkbit-devops
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-devops
+    app.kubernetes.io/version: "0.10.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+    alb.ingress.kubernetes.io/group.name: internal
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-FS-1-2-2019-08
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/target-type: ip
+spec:
+  rules:
+    - host: "hawkbit.lvt-platform-ops.aws.lvt.cloud"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hawkbit-devops
+                port:
+                  name: http
+---
+# Source: hawkbit/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "hawkbit-devops-test-connection"
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-devops
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: curl
+      image: curlimages/curl
+      command: ['curl']
+      args: [
+        "-X", "GET",
+        "-u", "admin:admin",
+        "http://hawkbit-devops:80/rest/v1/userinfo"
+      ]
+  restartPolicy: Never
+---
+# Source: hawkbit/templates/db-migrate-hook.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hawkbit-devops-db-migrate
+  labels:
+    app.kubernetes.io/name: hawkbit
+    helm.sh/chart: hawkbit-1.7.1-alpha22
+    app.kubernetes.io/instance: hawkbit-devops
+    app.kubernetes.io/version: "0.10.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hawkbit
+        app.kubernetes.io/instance: hawkbit-devops
+        app.kubernetes.io/component: db-migrate
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: db-migrate
+          image: "hawkbit/hawkbit-repository-jpa-init:0.10.0"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: HAWKBIT_DB_MODE
+              value: "migrate"
+            - name: PROFILES
+              value: "mysql"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:mariadb://hawkbit-devops-mariadb:3306/hawkbit"
+          envFrom:
+            - secretRef:
+                name: hawkbit-devops-db
+          volumeMounts:
