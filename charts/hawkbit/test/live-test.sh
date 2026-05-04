@@ -170,9 +170,10 @@ if [[ "$GUI_ENABLED" == "true" ]]; then
       pass "GUI login → $LOGIN_STATUS"
 
       # Authenticated request through GUI's hawkbit API proxy
+      # The proxy route prepends /rest/v1/ internally, so omit it here
       PROXY_STATUS=$(curl "${CURL_OPTS[@]}" -b "$COOKIE_JAR" \
         -o /dev/null -w "%{http_code}" \
-        "$GUI_URL/api/hawkbit/rest/v1/targets?limit=1" || true)
+        "$GUI_URL/api/hawkbit/targets?limit=1" || true)
       if [[ "$PROXY_STATUS" == "200" ]]; then
         pass "GUI /api/hawkbit proxy → $PROXY_STATUS"
       else
