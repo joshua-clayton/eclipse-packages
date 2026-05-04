@@ -42,6 +42,9 @@ spec:
             - name: secret-config
               mountPath: /secret-config
               readOnly: true
+            {{- if .Values.extraVolumeMounts }}
+            {{- toYaml .Values.extraVolumeMounts | nindent 12 }}
+            {{- end }}
       containers:
         - name: hawkbit-dmf
           image: "{{ .Values.microservices.dmf.image.repository }}:{{ .Values.microservices.dmf.image.tag }}"
