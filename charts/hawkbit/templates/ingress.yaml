@@ -1,6 +1,9 @@
 {{- if .Values.ingress.enabled -}}
 {{- $apiVersion := include "hawkbit.ingressAPIVersion" . -}}
 {{- $fullName := include "hawkbit.fullname" . -}}
+{{- $firstHost := (first .Values.ingress.hosts).host -}}
+{{- $domain := join "." (rest (splitList "." $firstHost)) -}}
+{{- $guiHost := printf "hawkbitgui.%s" $domain -}}
 apiVersion: {{ $apiVersion }}
 kind: Ingress
 metadata:
@@ -31,13 +34,7 @@ spec:
       http:
         paths:
           {{- if $.Values.microservices.enabled }}
-          - path: /rest
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ $fullName }}-mgmt
-                port:
-                  name: http
+          {{- /* Microservices: DDI paths explicit, mgmt as catch-all */}}
           {{- range $.Values.microservices.ddi.ingressPaths }}
           - path: {{ . }}
             pathType: Prefix
@@ -47,26 +44,15 @@ spec:
                 port:
                   name: http
           {{- end }}
-          {{- else }}
-          {{- if $.Values.gui.enabled }}
-          {{- /* monolith + gui: explicitly route api paths to monolith */}}
-          - path: /rest
+          - path: /
             pathType: Prefix
             backend:
               service:
-                name: {{ $fullName }}
+                name: {{ $fullName }}-mgmt
                 port:
                   name: http
-          {{- range $.Values.microservices.ddi.ingressPaths }}
-          - path: {{ . }}
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ $fullName }}
-                port:
-                  name: http
-          {{- end }}
           {{- else }}
+          {{- /* Monolith: route configured paths to the single service */}}
           {{- range .paths }}
           - path: {{ . }}
             pathType: Prefix
@@ -77,8 +63,12 @@ spec:
                   name: http
           {{- end }}
           {{- end }}
-          {{- end }}
-          {{- if $.Values.gui.enabled }}
+  {{- end }}
+  {{- /* hawkbitgui gets its own hostname when enabled */}}
+  {{- if $.Values.hawkbitgui.enabled }}
+    - host: {{ $guiHost | quote }}
+      http:
+        paths:
           - path: /
             pathType: Prefix
             backend:
@@ -86,6 +76,5 @@ spec:
                 name: {{ $fullName }}-gui
                 port:
                   name: http
-          {{- end }}
   {{- end }}
 {{- end }}

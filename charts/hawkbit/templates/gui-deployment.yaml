@@ -1,4 +1,4 @@
-{{- if .Values.gui.enabled }}
+{{- if .Values.hawkbitgui.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -7,7 +7,7 @@ metadata:
 {{ include "hawkbit.labels" . | indent 4 }}
     app.kubernetes.io/component: gui
 spec:
-  replicas: {{ .Values.gui.replicaCount }}
+  replicas: {{ .Values.hawkbitgui.replicaCount }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ include "hawkbit.name" . }}
@@ -30,15 +30,23 @@ spec:
     {{- end }}
       containers:
         - name: hawkbitgui
-          image: "{{ .Values.gui.image.repository }}:{{ .Values.gui.image.tag }}"
-          imagePullPolicy: {{ .Values.gui.image.pullPolicy }}
+          image: "{{ .Values.hawkbitgui.image.repository }}:{{ .Values.hawkbitgui.image.tag }}"
+          imagePullPolicy: {{ .Values.hawkbitgui.image.pullPolicy }}
           env:
             - name: NEXTAUTH_URL
-              value: {{ .Values.gui.nextauth.url | quote }}
+              {{- $firstHost := (first .Values.ingress.hosts).host }}
+              {{- $domain := join "." (rest (splitList "." $firstHost)) }}
+              value: {{ printf "https://hawkbitgui.%s" $domain | quote }}
             - name: NEXTAUTH_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.gui.nextauth.existingSecret }}
+                  {{- if .Values.hawkbitgui.nextauth.existingSecret }}
+                  name: {{ .Values.hawkbitgui.nextauth.existingSecret }}
+                  {{- else if .Values.hawkbitgui.nextauth.secret }}
+                  name: {{ printf "%s-gui" (include "hawkbit.fullname" .) }}
+                  {{- else }}
+                  {{- fail "hawkbitgui.nextauth.existingSecret or hawkbitgui.nextauth.secret must be set when hawkbitgui.enabled=true" }}
+                  {{- end }}
                   key: NEXTAUTH_SECRET
             - name: HAWKBIT_API_URL
               value: {{ printf "http://%s-%s:8080" (include "hawkbit.fullname" .) (ternary "mgmt" "monolith" .Values.microservices.enabled) | quote }}
@@ -59,7 +67,7 @@ spec:
             initialDelaySeconds: 10
             timeoutSeconds: 5
           resources:
-{{ toYaml .Values.gui.resources | indent 12 }}
+{{ toYaml .Values.hawkbitgui.resources | indent 12 }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

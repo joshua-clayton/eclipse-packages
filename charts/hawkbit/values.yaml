@@ -208,7 +208,7 @@ microservices:
     resources: {}
 
 ## hawkbitgui — optional Next.js management UI
-gui:
+hawkbitgui:
   enabled: false
   image:
     repository: "ghcr.io/joshua-clayton/hawkbitgui"
@@ -217,9 +217,10 @@ gui:
   replicaCount: 1
   service:
     port: 3000
+  # NEXTAUTH_URL is derived from ingress host automatically (hawkbitgui.<domain>).
   nextauth:
-    # NEXTAUTH_URL: full public URL of the GUI (e.g., https://hawkbit.example.com)
-    url: "http://localhost:3000"
-    # existingSecret must contain key: NEXTAUTH_SECRET
+    # Use an existing secret containing key: NEXTAUTH_SECRET
     existingSecret: ""
+    # Literal value for NEXTAUTH_SECRET; ignored if existingSecret is set
+    secret: ""
   resources: {}
