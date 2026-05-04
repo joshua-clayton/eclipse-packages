@@ -13,9 +13,9 @@ metadata:
     helm.sh/chart: mariadb-0.16.1
 type: Opaque
 data:
-  mariadb-root-password: "OGs3TnlPM1lxNURHSllWNXBKcWRMS0l5TXNGSXhnNXQ="
+  mariadb-root-password: "T3U0MGt1a3licUdLZU9wcmk4Q3lGbkF0NVF6SUlpZVU="
   mariadb-password: "aGF3a2JpdA=="
-  metricsExporterPassword: "QjhzQTVRWEplUDNHSG5LQmpneXg4MHdFUmZCMGRPY0o="
+  metricsExporterPassword: "T29qWmd2SmNsdVo5OEVNNzdZUTRHb2QyZ0hXOGN2V1Q="
 ---
 # Source: hawkbit/templates/secrets.yaml
 apiVersion: v1
@@ -24,7 +24,7 @@ metadata:
   name: hawkbit-devops-user
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-devops
     app.kubernetes.io/version: "0.10.0"
     app.kubernetes.io/managed-by: Helm
@@ -69,7 +69,7 @@ metadata:
   name: hawkbit-devops
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-devops
     app.kubernetes.io/version: "0.10.0"
     app.kubernetes.io/managed-by: Helm
@@ -111,7 +111,7 @@ metadata:
   name: hawkbit-devops-data
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-devops
     app.kubernetes.io/version: "0.10.0"
     app.kubernetes.io/managed-by: Helm
@@ -156,7 +156,7 @@ metadata:
   name: hawkbit-devops
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-devops
     app.kubernetes.io/version: "0.10.0"
     app.kubernetes.io/managed-by: Helm
@@ -178,7 +178,7 @@ metadata:
   name: hawkbit-devops
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-devops
     app.kubernetes.io/version: "0.10.0"
     app.kubernetes.io/managed-by: Helm
@@ -196,7 +196,7 @@ spec:
         app.kubernetes.io/name: hawkbit
         app.kubernetes.io/instance: hawkbit-devops
       annotations:
-        checksum/config: adb90071c68aaf3888a02ecf2d6e05eb7e01de26d394e429813a32d5a3ad6b99
+        checksum/config: db80f2ca7009027393f7ee786899cb55bfa6f3628819125a5aca524de95ff9a6
     spec:
       initContainers:
         - name: hawkbit-init
@@ -460,7 +460,7 @@ metadata:
   name: hawkbit-devops
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-devops
     app.kubernetes.io/version: "0.10.0"
     app.kubernetes.io/managed-by: Helm
@@ -492,7 +492,7 @@ metadata:
   name: "hawkbit-devops-test-connection"
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-devops
     app.kubernetes.io/managed-by: Helm
   annotations:
@@ -516,16 +516,17 @@ metadata:
   name: hawkbit-devops-db-migrate
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-devops
     app.kubernetes.io/version: "0.10.0"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-5"
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
 spec:
   backoffLimit: 3
+  ttlSecondsAfterFinished: 600
   template:
     metadata:
       labels:

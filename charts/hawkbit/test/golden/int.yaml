@@ -35,7 +35,7 @@ metadata:
   name: hawkbit-int
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-int
     app.kubernetes.io/version: "0.10.0"
     app.kubernetes.io/managed-by: Helm
@@ -91,7 +91,7 @@ metadata:
   name: hawkbit-int-data
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-int
     app.kubernetes.io/version: "0.10.0"
     app.kubernetes.io/managed-by: Helm
@@ -170,7 +170,7 @@ metadata:
   name: hawkbit-int-gui
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-int
     app.kubernetes.io/version: "0.10.0"
     app.kubernetes.io/managed-by: Helm
@@ -194,7 +194,7 @@ metadata:
   name: hawkbit-int-ddi
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-int
     app.kubernetes.io/version: "0.10.0"
     app.kubernetes.io/managed-by: Helm
@@ -218,7 +218,7 @@ metadata:
   name: hawkbit-int-mgmt
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-int
     app.kubernetes.io/version: "0.10.0"
     app.kubernetes.io/managed-by: Helm
@@ -242,7 +242,7 @@ metadata:
   name: hawkbit-int-gui
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-int
     app.kubernetes.io/version: "0.10.0"
     app.kubernetes.io/managed-by: Helm
@@ -310,7 +310,7 @@ metadata:
   name: hawkbit-int-ddi
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-int
     app.kubernetes.io/version: "0.10.0"
     app.kubernetes.io/managed-by: Helm
@@ -439,7 +439,7 @@ metadata:
   name: hawkbit-int-dmf
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-int
     app.kubernetes.io/version: "0.10.0"
     app.kubernetes.io/managed-by: Helm
@@ -547,7 +547,7 @@ metadata:
   name: hawkbit-int-mgmt
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-int
     app.kubernetes.io/version: "0.10.0"
     app.kubernetes.io/managed-by: Helm
@@ -836,7 +836,7 @@ metadata:
   name: hawkbit-int
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-int
     app.kubernetes.io/version: "0.10.0"
     app.kubernetes.io/managed-by: Helm
@@ -885,7 +885,7 @@ metadata:
   name: "hawkbit-int-test-connection"
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-int
     app.kubernetes.io/managed-by: Helm
   annotations:
@@ -909,16 +909,17 @@ metadata:
   name: hawkbit-int-db-migrate
   labels:
     app.kubernetes.io/name: hawkbit
-    helm.sh/chart: hawkbit-1.7.1-alpha22
+    helm.sh/chart: hawkbit-1.7.1-alpha23
     app.kubernetes.io/instance: hawkbit-int
     app.kubernetes.io/version: "0.10.0"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-5"
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
 spec:
   backoffLimit: 3
+  ttlSecondsAfterFinished: 600
   template:
     metadata:
       labels:
