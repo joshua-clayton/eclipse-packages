@@ -212,7 +212,7 @@ hawkbitgui:
   enabled: false
   image:
     repository: "ghcr.io/joshua-clayton/hawkbitgui"
-    tag: "0.1.0"
+    tag: "5b48287"
     pullPolicy: IfNotPresent
   replicaCount: 1
   service:
