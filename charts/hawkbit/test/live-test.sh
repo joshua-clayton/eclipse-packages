@@ -141,13 +141,50 @@ fi
 if [[ "$GUI_ENABLED" == "true" ]]; then
   GUI_URL="${BASE_URL/hawkbit./hawkbitgui.}"
   echo "── GUI"
+
+  # Unauthenticated homepage — NextAuth redirects unauthenticated users (307) or shows login page (200)
   STATUS=$(curl "${CURL_OPTS[@]}" -o /dev/null -w "%{http_code}" \
     "$GUI_URL/" || true)
-  if [[ "$STATUS" == "200" ]]; then
+  if [[ "$STATUS" == "200" || "$STATUS" == "307" ]]; then
     pass "GUI $GUI_URL/ → $STATUS"
   else
-    fail "GUI $GUI_URL/ → $STATUS (expected 200)"
+    fail "GUI $GUI_URL/ → $STATUS (expected 200 or 307)"
   fi
+
+  # NextAuth login flow: get CSRF token, then POST credentials
+  COOKIE_JAR=$(mktemp)
+  CSRF_TOKEN=$(curl "${CURL_OPTS[@]}" -c "$COOKIE_JAR" \
+    "$GUI_URL/api/auth/csrf" | python3 -c "import sys,json; print(json.load(sys.stdin)['csrfToken'])" 2>/dev/null || true)
+
+  if [[ -n "$CSRF_TOKEN" ]]; then
+    pass "GUI CSRF token obtained"
+
+    LOGIN_STATUS=$(curl "${CURL_OPTS[@]}" -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+      -o /dev/null -w "%{http_code}" \
+      -X POST \
+      -H "Content-Type: application/x-www-form-urlencoded" \
+      -d "username=${ADMIN_USER}&password=${ADMIN_PASS}&csrfToken=${CSRF_TOKEN}&callbackUrl=/" \
+      "$GUI_URL/api/auth/callback/credentials" || true)
+    # NextAuth redirects to callbackUrl on success (302) or to error page on failure
+    if [[ "$LOGIN_STATUS" == "200" || "$LOGIN_STATUS" == "302" ]]; then
+      pass "GUI login → $LOGIN_STATUS"
+
+      # Authenticated request through GUI's hawkbit API proxy
+      PROXY_STATUS=$(curl "${CURL_OPTS[@]}" -b "$COOKIE_JAR" \
+        -o /dev/null -w "%{http_code}" \
+        "$GUI_URL/api/hawkbit/rest/v1/targets?limit=1" || true)
+      if [[ "$PROXY_STATUS" == "200" ]]; then
+        pass "GUI /api/hawkbit proxy → $PROXY_STATUS"
+      else
+        fail "GUI /api/hawkbit proxy → $PROXY_STATUS (expected 200)"
+      fi
+    else
+      fail "GUI login → $LOGIN_STATUS (expected 200 or 302)"
+    fi
+  else
+    fail "GUI CSRF token request failed"
+  fi
+  rm -f "$COOKIE_JAR"
 fi
 
 # Artifact upload/download lifecycle (verifies fileStorage is mounted and writable)
