@@ -1,9 +1,8 @@
 {{- if .Values.ingress.enabled -}}
 {{- $apiVersion := include "hawkbit.ingressAPIVersion" . -}}
 {{- $fullName := include "hawkbit.fullname" . -}}
-{{- $firstHost := (first .Values.ingress.hosts).host -}}
-{{- $domain := join "." (rest (splitList "." $firstHost)) -}}
-{{- $guiHost := printf "hawkbitgui.%s" $domain -}}
+{{- $hostname := .Values.ingress.hostname -}}
+{{- $guiHost := .Values.hawkbitgui.hostname -}}
 apiVersion: {{ $apiVersion }}
 kind: Ingress
 metadata:
@@ -29,21 +28,18 @@ spec:
   ingressClassName: {{ .Values.ingress.ingressClassName }}
   {{- end }}
   rules:
-  {{- range .Values.ingress.hosts }}
-    - host: {{ .host | quote }}
+    - host: {{ $hostname | quote }}
       http:
         paths:
           {{- if $.Values.microservices.enabled }}
-          {{- /* Microservices: DDI paths explicit, mgmt as catch-all */}}
-          {{- range $.Values.microservices.ddi.ingressPaths }}
-          - path: {{ . }}
+          {{- /* Microservices: DDI controller path routes to DDI service, mgmt is catch-all */}}
+          - path: /DEFAULT/controller
             pathType: Prefix
             backend:
               service:
                 name: {{ $fullName }}-ddi
                 port:
                   name: http
-          {{- end }}
           - path: /
             pathType: Prefix
             backend:
@@ -52,9 +48,8 @@ spec:
                 port:
                   name: http
           {{- else }}
-          {{- /* Monolith: route configured paths to the single service */}}
-          {{- range .paths }}
-          - path: {{ . }}
+          {{- /* Monolith: single catch-all */}}
+          - path: /
             pathType: Prefix
             backend:
               service:
@@ -62,8 +57,6 @@ spec:
                 port:
                   name: http
           {{- end }}
-          {{- end }}
-  {{- end }}
   {{- /* hawkbitgui gets its own hostname when enabled */}}
   {{- if $.Values.hawkbitgui.enabled }}
     - host: {{ $guiHost | quote }}

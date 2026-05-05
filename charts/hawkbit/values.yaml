@@ -71,9 +71,7 @@ ingress:
   annotations: {}
     # ingress.kubernetes.io/ssl-redirect: "true"
     # kubernetes.io/tls-acme: "true"
-  hosts:
-    - host: hawkbit.local
-      paths: []
+  hostname: hawkbit.local
   tls: []
   #  - secretName: hawkbit-tls
   #    hosts:
@@ -197,8 +195,6 @@ microservices:
       pullPolicy: IfNotPresent
     replicaCount: 1
     resources: {}
-    # Ingress paths routed to the DDI server (e.g., ["/DEFAULT/controller"])
-    ingressPaths: []
   dmf:
     image:
       repository: "hawkbit/hawkbit-dmf-server"
@@ -217,7 +213,7 @@ hawkbitgui:
   replicaCount: 1
   service:
     port: 3000
-  # NEXTAUTH_URL is derived from ingress host automatically (hawkbitgui.<domain>).
+  hostname: hawkbitgui.local
   nextauth:
     # Use an existing secret containing key: NEXTAUTH_SECRET
     existingSecret: ""

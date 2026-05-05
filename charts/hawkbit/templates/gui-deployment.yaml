@@ -34,9 +34,7 @@ spec:
           imagePullPolicy: {{ .Values.hawkbitgui.image.pullPolicy }}
           env:
             - name: NEXTAUTH_URL
-              {{- $firstHost := (first .Values.ingress.hosts).host }}
-              {{- $domain := join "." (rest (splitList "." $firstHost)) }}
-              value: {{ printf "https://hawkbitgui.%s" $domain | quote }}
+              value: {{ printf "https://%s" .Values.hawkbitgui.hostname | quote }}
             - name: NEXTAUTH_SECRET
               valueFrom:
                 secretKeyRef:
