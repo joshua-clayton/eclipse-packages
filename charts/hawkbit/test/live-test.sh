@@ -46,6 +46,11 @@ FAILED=0
 # Shared curl options: fail silently, 10s connect timeout, 30s max transfer
 CURL_OPTS=(-sf --connect-timeout 10 --max-time 30)
 
+# Timed curl: same as CURL_OPTS but captures response time
+curl_timed() {
+  curl "${CURL_OPTS[@]}" -w '\n%{time_total} %{http_code}' "$@"
+}
+
 echo "=== hawkbit-$ENV live tests ==="
 echo "    URL: $BASE_URL"
 echo ""
@@ -53,8 +58,14 @@ echo ""
 # Health check (unauthenticated)
 echo "── Health"
 STATUS=$(curl "${CURL_OPTS[@]}" -o /dev/null -w "%{http_code}" "$BASE_URL/actuator/health" || true)
+HEALTH_TIME=$(curl "${CURL_OPTS[@]}" -o /dev/null -w "%{time_total}" "$BASE_URL/actuator/health" || true)
 if [[ "$STATUS" == "200" ]]; then
-  pass "actuator/health → $STATUS"
+  pass "actuator/health → $STATUS (${HEALTH_TIME}s)"
+  if awk "BEGIN { exit ($HEALTH_TIME < 5) ? 0 : 1 }"; then
+    pass "Health response time acceptable (${HEALTH_TIME}s < 5s)"
+  else
+    fail "Health response slow (${HEALTH_TIME}s ≥ 5s) — possible DB trouble"
+  fi
 else
   fail "actuator/health → $STATUS (expected 200)"
 fi
@@ -109,6 +120,44 @@ if echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 't
   pass "Target list response valid (total: $TOTAL)"
 else
   fail "Target list response invalid or unparseable"
+fi
+
+# API response time — slow responses indicate DB contention or recovery
+API_TIME=$(curl "${CURL_OPTS[@]}" -o /dev/null -w "%{time_total}" \
+  -u "$ADMIN_USER:$ADMIN_PASS" \
+  "$BASE_URL/rest/v1/targets?limit=1" || true)
+if awk "BEGIN { exit ($API_TIME < 3) ? 0 : 1 }"; then
+  pass "API response time acceptable (${API_TIME}s < 3s)"
+else
+  fail "API response slow (${API_TIME}s ≥ 3s) — possible DB trouble"
+fi
+
+# Write persistence — verifies DB is writable, not just readable.
+# Creates a rollout group (lightweight, no side effects), reads it back, then deletes it.
+echo "── DB write persistence"
+DS_BODY=$(curl "${CURL_OPTS[@]}" -X POST \
+  -u "$ADMIN_USER:$ADMIN_PASS" \
+  -H "Content-Type: application/json" \
+  -d '[{"name":"live-test-ds","version":"0.0.0-test","type":"app"}]' \
+  "$BASE_URL/rest/v1/distributionsets" || true)
+DS_ID=$(echo "$DS_BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])" 2>/dev/null || true)
+if [[ -n "$DS_ID" ]]; then
+  pass "Distribution set created (id: $DS_ID)"
+  # Read it back to confirm write persisted
+  READ_STATUS=$(curl "${CURL_OPTS[@]}" -o /dev/null -w "%{http_code}" \
+    -u "$ADMIN_USER:$ADMIN_PASS" \
+    "$BASE_URL/rest/v1/distributionsets/$DS_ID" || true)
+  if [[ "$READ_STATUS" == "200" ]]; then
+    pass "Write persisted — read back succeeded"
+  else
+    fail "Write not persisted — read back → $READ_STATUS"
+  fi
+  # Clean up
+  curl "${CURL_OPTS[@]}" -X DELETE \
+    -u "$ADMIN_USER:$ADMIN_PASS" \
+    "$BASE_URL/rest/v1/distributionsets/$DS_ID" > /dev/null 2>&1 || true
+else
+  fail "Distribution set creation failed — DB may be down or read-only"
 fi
 
 # Swagger UI (served by mgmt in microservices mode, monolith otherwise)
