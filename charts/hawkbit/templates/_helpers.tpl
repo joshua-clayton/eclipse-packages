@@ -155,6 +155,21 @@ Database helpers — switch between externalDatabase and the bundled mariadb sub
 {{- end -}}
 
 {{/*
+DB credential env vars for the mariadb case, injected via secretKeyRef.
+*/}}
+{{- define "hawkbit.dbCredentialsEnv" -}}
+{{- if .Values.mariadb.enabled }}
+- name: SPRING_DATASOURCE_USERNAME
+  value: "root"
+- name: SPRING_DATASOURCE_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "mariadb.secretName" .Subcharts.mariadb }}
+      key: {{ .Values.mariadb.auth.secretKeys.rootPasswordKey | default "mysql-root-password" }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Environment variables shared by all hawkbit containers (init and application).
 All vars are either used by both or safely ignored by whichever doesn't need them.
 Appends .Values.extraEnv (must be a list of k8s env var objects) when set.
@@ -166,6 +181,7 @@ Appends .Values.extraEnv (must be a list of k8s env var objects) when set.
   value: {{ include "hawkbit.database.url" . | quote }}
 - name: SPRING_FLYWAY_ENABLED
   value: "false"
+{{- include "hawkbit.dbCredentialsEnv" . }}
 {{- if .Values.fileStorage.enabled }}
 - name: ORG_ECLIPSE_HAWKBIT_ARTIFACT_FS_PATH
   value: {{ .Values.fileStorage.mountPath }}
@@ -176,5 +192,15 @@ Appends .Values.extraEnv (must be a list of k8s env var objects) when set.
 {{- else }}
 {{- fail (printf "extraEnv must be a list of env var objects (got %s). See values.yaml for the supported format." (kindOf .)) }}
 {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+envFrom items for internal or external database credentials.
+*/}}
+{{- define "hawkbit.dbEnvFrom" -}}
+{{- if not .Values.mariadb.enabled }}
+- secretRef:
+    name: {{ include "hawkbit.dbCredentialsSecretName" . }}
 {{- end }}
 {{- end -}}

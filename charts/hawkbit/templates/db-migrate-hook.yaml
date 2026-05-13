@@ -32,9 +32,9 @@ spec:
               value: {{ include "hawkbit.spring.profiles" . | quote }}
             - name: SPRING_DATASOURCE_URL
               value: {{ include "hawkbit.database.url" . | quote }}
+            {{- include "hawkbit.dbCredentialsEnv" . | nindent 12 }}
           envFrom:
-            - secretRef:
-                name: {{ include "hawkbit.dbCredentialsSecretName" . }}
+            {{- include "hawkbit.dbEnvFrom" . | nindent 12 }}
           volumeMounts:
             {{- if .Values.extraVolumeMounts }}
             {{- toYaml .Values.extraVolumeMounts | nindent 12 }}

@@ -33,8 +33,7 @@ spec:
           env:
             {{- include "hawkbit.env" . | nindent 12 }}
           envFrom:
-            - secretRef:
-                name: {{ include "hawkbit.dbCredentialsSecretName" . }}
+            {{- include "hawkbit.dbEnvFrom" . | nindent 12 }}
           volumeMounts:
             - name: configmap
               mountPath: {{ .Values.configMap.mountPath }}
@@ -55,8 +54,7 @@ spec:
           env:
             {{- include "hawkbit.env" . | nindent 12 }}
           envFrom:
-            - secretRef:
-                name: {{ include "hawkbit.dbCredentialsSecretName" . }}
+            {{- include "hawkbit.dbEnvFrom" . | nindent 12 }}
             {{- if .Values.rabbitmq.enabled }}
             - secretRef:
                 name: {{ include "hawkbit.rabbitmqCredentialsSecretName" . }}
