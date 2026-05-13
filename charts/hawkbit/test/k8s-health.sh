@@ -40,38 +40,45 @@ echo ""
 
 # ── Pod restarts ──────────────────────────────────────────────────────────────
 echo "── Pod restarts (threshold: $MAX_RESTARTS)"
-while IFS= read -r line; do
-  POD=$(echo "$line" | awk '{print $1}')
-  CONTAINER=$(echo "$line" | awk '{print $2}')
-  RESTARTS=$(echo "$line" | awk '{print $3}')
-  STATE=$(echo "$line" | awk '{print $4}')
 
-  if [[ "$RESTARTS" -gt "$MAX_RESTARTS" ]]; then
-    fail "$POD/$CONTAINER: $RESTARTS restarts (state: $STATE)"
-  elif [[ "$RESTARTS" -gt 0 ]]; then
-    warn "$POD/$CONTAINER: $RESTARTS restarts (state: $STATE)"
-  else
-    pass "$POD/$CONTAINER: 0 restarts (state: $STATE)"
-  fi
-done < <($KUBECTL get pods -l "app.kubernetes.io/instance=$RELEASE" \
-  -o jsonpath='{range .items[*]}{range .status.containerStatuses[*]}{..name} {.name} {.restartCount} {.state..reason}{"\n"}{end}{end}' 2>/dev/null || true)
+RESTART_SCRIPT='
+import sys, json, os
+data = json.load(sys.stdin)
+max_r = int(os.environ.get("MAX_RESTARTS", "5"))
+prefix = os.environ.get("POD_PREFIX", "")
+for pod in data.get("items", []):
+    pname = pod["metadata"]["name"]
+    for c in pod["status"].get("containerStatuses", []):
+        cname = c["name"]
+        restarts = c.get("restartCount", 0)
+        state = next(iter(c.get("state", {}).keys()), "unknown")
+        lbl = prefix + pname + "/" + cname
+        if restarts > max_r:
+            print("FAIL " + lbl + ": " + str(restarts) + " restarts (state: " + state + ")")
+        elif restarts > 0:
+            print("WARN " + lbl + ": " + str(restarts) + " restarts (state: " + state + ")")
+        else:
+            print("PASS " + lbl + ": 0 restarts (state: " + state + ")")
+'
 
-# Check DB pod separately (may have different label)
-while IFS= read -r line; do
-  POD=$(echo "$line" | awk '{print $1}')
-  CONTAINER=$(echo "$line" | awk '{print $2}')
-  RESTARTS=$(echo "$line" | awk '{print $3}')
-  STATE=$(echo "$line" | awk '{print $4}')
+process_restart_output() {
+  while IFS= read -r line; do
+    tag="${line%% *}"; msg="${line#* }"
+    case "$tag" in
+      FAIL) fail "$msg" ;;
+      WARN) warn "$msg" ;;
+      PASS) pass "$msg" ;;
+    esac
+  done
+}
 
-  if [[ "$RESTARTS" -gt "$MAX_RESTARTS" ]]; then
-    fail "DB $POD/$CONTAINER: $RESTARTS restarts (state: $STATE)"
-  elif [[ "$RESTARTS" -gt 0 ]]; then
-    warn "DB $POD/$CONTAINER: $RESTARTS restarts (state: $STATE)"
-  else
-    pass "DB $POD/$CONTAINER: 0 restarts (state: $STATE)"
-  fi
-done < <($KUBECTL get pods -l "app.kubernetes.io/name=mariadb" \
-  -o jsonpath='{range .items[*]}{range .status.containerStatuses[*]}{..name} {.name} {.restartCount} {.state..reason}{"\n"}{end}{end}' 2>/dev/null || true)
+$KUBECTL get pods -l "app.kubernetes.io/instance=$RELEASE" -o json 2>/dev/null \
+  | MAX_RESTARTS="$MAX_RESTARTS" python3 -c "$RESTART_SCRIPT" \
+  | process_restart_output
+
+$KUBECTL get pods -l "app.kubernetes.io/name=mariadb" -o json 2>/dev/null \
+  | MAX_RESTARTS="$MAX_RESTARTS" POD_PREFIX="DB " python3 -c "$RESTART_SCRIPT" \
+  | process_restart_output
 
 # ── Pod readiness ─────────────────────────────────────────────────────────────
 echo "── Pod readiness"
@@ -128,22 +135,37 @@ done < <($KUBECTL get pvc \
 # ── Recent OOMKill / exit 137 ────────────────────────────────────────────────
 echo "── Recent fatal exits"
 FOUND_FATAL=0
-while IFS= read -r line; do
-  POD=$(echo "$line" | awk '{print $1}')
-  CONTAINER=$(echo "$line" | awk '{print $2}')
-  EXIT_CODE=$(echo "$line" | awk '{print $3}')
-  REASON=$(echo "$line" | awk '{print $4}')
-  if [[ -n "$EXIT_CODE" && "$EXIT_CODE" != "0" && "$EXIT_CODE" != "<no" ]]; then
+
+FATAL_SCRIPT='
+import sys, json
+data = json.load(sys.stdin)
+for pod in data.get("items", []):
+    pname = pod["metadata"]["name"]
+    for c in pod["status"].get("containerStatuses", []):
+        last = c.get("lastState", {}).get("terminated")
+        if last and last.get("exitCode", 0) != 0:
+            code = last["exitCode"]
+            reason = last.get("reason", "")
+            cname = c["name"]
+            print(pname + "/" + cname + " " + str(code) + " " + reason)
+'
+FATAL_OUTPUT=$($KUBECTL get pods -o json 2>/dev/null | python3 -c "$FATAL_SCRIPT" || true)
+
+if [[ -n "$FATAL_OUTPUT" ]]; then
+  while IFS= read -r line; do
+    POD=$(echo "$line" | awk '{print $1}')
+    EXIT_CODE=$(echo "$line" | awk '{print $2}')
+    REASON=$(echo "$line" | awk '{print $3}')
     FOUND_FATAL=1
     if [[ "$EXIT_CODE" == "137" ]]; then
-      fail "$POD/$CONTAINER: last exit $EXIT_CODE (OOMKill/SIGKILL — check startup probe and memory limits)"
+      fail "$POD: last exit $EXIT_CODE (OOMKill/SIGKILL — check startup probe and memory limits)"
     else
-      warn "$POD/$CONTAINER: last exit $EXIT_CODE reason=$REASON"
+      warn "$POD: last exit $EXIT_CODE reason=$REASON"
     fi
-  fi
-done < <($KUBECTL get pods \
-  -o jsonpath='{range .items[*]}{range .status.containerStatuses[*]}{..name} {.name} {.lastState.terminated.exitCode} {.lastState.terminated.reason}{"\n"}{end}{end}' 2>/dev/null || true)
+  done <<< "$FATAL_OUTPUT"
+fi
 [[ "$FOUND_FATAL" -eq 0 ]] && pass "No fatal exits in last pod state"
+
 
 echo ""
 if [[ "$FAILED" -eq 0 ]]; then
