@@ -65,13 +65,13 @@ spec:
               protocol: TCP
           livenessProbe:
             httpGet:
-              path: /swagger-ui/index.html
+              path: /actuator/health/liveness
               port: http
             initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
             timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
           readinessProbe:
             httpGet:
-              path: /swagger-ui/index.html
+              path: /actuator/health/readiness
               port: http
             initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
             timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}

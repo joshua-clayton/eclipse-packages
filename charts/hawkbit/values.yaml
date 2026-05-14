@@ -127,6 +127,9 @@ config:
     server:
       useForwardHeaders: true
     management:
+      health:
+        probes:
+          enabled: true
       endpoint:
         health:
           show-details: when-authorized
