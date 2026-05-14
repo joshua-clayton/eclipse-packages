@@ -1,0 +1,242 @@
+---
+# Hawkbit Infrastructure Resource Registry
+# Keep this file up to date as resources are added, changed, or removed.
+# Always ask the user before modifying this file.
+
+# Architecture note:
+#   devops  — legacy cluster, partly broken; will be RETIRED once int/stg/prd are viable.
+#             Runs on the old ArgoCD instance (appsets/).
+#   int/stg/prd — new ArgoCD instance (argo/v3/), new cluster infrastructure.
+#             int is active; stg and prd are WIP (hawkbit-prd branch, not yet merged to main).
+
+shared:
+  github:
+    helm_chart:
+      repo: eclipse/packages
+      local: ~/src/eclipse/packages
+      path: charts/hawkbit/
+    hawkbitgui:
+      repo: joshua-clayton/hawkbitgui  # personal fork; image published to ghcr.io/joshua-clayton/hawkbitgui
+      local: ~/src/hawkbitgui
+      branch: fork
+      image: ghcr.io/joshua-clayton/hawkbitgui
+      note: GUI component deployed via hawkbit helm chart (hawkbitgui.enabled)
+    argocd:
+      repo: liveviewtech/argocd
+      local: ~/src/argocd
+      common_values: values/infrastructure/hawkbit/common.yaml
+    vault_terraform:
+      repo: liveviewtech/vault-terraform
+      local: ~/src/vault-terraform
+    jfrog_infrastructure:
+      repo: liveviewtech/jfrog-infrastructure
+      local: ~/src/jfrog-infrastructure
+      helm_tf_file: terraform/helm.tf
+      resource: artifactory_remote_helm_repository.hawkbit
+      repo_key: helm-hawkbit
+      proxies: https://eclipse.org/packages/charts
+
+devops:
+  note: LEGACY CLUSTER — will be retired once int/stg/prd are viable. Do not invest heavily.
+  github:
+    argocd:
+      repo: liveviewtech/argocd
+      argocd_instance: legacy  # appsets/ — old ArgoCD instance
+      branch: hawkbit-mariadb-recovery
+      applicationset: appsets/infra-hawkbit.yaml
+      values: values/infrastructure/hawkbit/devops.yaml
+      external_secrets_file: cluster-resources/env/devops/external-secrets/secrets.yaml
+
+  vault:
+    kv_path: apps/devops/infrastructure/hawkbit
+    keys:
+      - name: hawkbit-password
+      - name: hawkbit-dmf-password
+      - name: mysql-password
+      - name: mysql-root-password
+      - name: rabbitmq-password
+      - name: MARIADB_METRICS_PASSWD
+        maps_to_k8s_key: metricsExporterPassword  # remap pending in external-secrets
+
+  kubernetes:
+    cluster_context: devops
+    namespace: hawkbit
+    hostname: hawkbit.lvt-platform-ops.aws.lvt.cloud
+    argocd_app: hawkbit-devops
+    secrets:
+      - name: hawkbit-secret
+        managed_by: ExternalSecret/hawkbit
+        keys:
+          - hawkbit-password
+          - hawkbit-dmf-password
+          - mysql-password
+          - mysql-root-password
+          - rabbitmq-password
+          - metricsExporterPassword  # sourced from MARIADB_METRICS_PASSWD in vault; remap pending
+      - name: hawkbit-devops-db
+        managed_by: ExternalSecret/hawkbit-db
+        note: orphaned — no longer referenced by chart alpha29+; remove after upgrade confirmed stable
+        keys:
+          - SPRING_DATASOURCE_USERNAME
+          - SPRING_DATASOURCE_PASSWORD
+
+  aws: {}  # devops uses embedded MariaDB; no RDS or IAM resources
+
+int:
+  github:
+    argocd:
+      repo: liveviewtech/argocd
+      argocd_instance: new  # argo/v3/ — new ArgoCD instance
+      applicationset: argo/v3/infra-hawkbit.yaml
+      cluster_name: integration  # name used in AppSet generators
+      values: values/infrastructure/hawkbit/int.yaml
+      external_secrets_file: cluster-resources/env/int/external-secrets/secrets.yaml
+      extra_k8s_manifests:
+        - cluster-resources/env/int/hawkbit/rds-ca-configmap.yaml
+
+  vault:
+    kv_path: apps/int/infrastructure/hawkbit
+    dynamic_db_secrets_engine: vault-terraform/terraform/secrets_engines/hawkbit-int/
+    k8s_auth_role: app-hawkbit
+    policy_file: vault-terraform/terraform/policies/application/app-hawkbit-int.hcl
+    dynamic_creds_paths:
+      - application-db/creds/hawkbit-int-app-rw
+      - application-db/creds/hawkbit-int-app-ro
+
+  kubernetes:
+    cluster_context: int
+    namespace: hawkbit
+    hostname: hawkbit.int.lvt.services
+    argocd_app: hawkbit-integration
+    secrets:
+      - name: hawkbit-db-rw
+        managed_by: VaultDynamicSecret/hawkbit-db-rw  # Vault Secrets Operator, not ExternalSecrets
+        note: dynamic DB credentials; feeds into hawkbit-db-secret via ExternalSecret template
+      - name: hawkbit-db-secret
+        managed_by: ExternalSecret/hawkbit-db
+        keys: [SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD]
+      - name: hawkbit-user-secret
+        managed_by: ExternalSecret/hawkbit-user
+        vault_path: apps/int/infrastructure/hawkbit
+        keys: [password, application-user-credentials.yaml]
+      - name: hawkbit-rabbitmq-secret
+        managed_by: ExternalSecret/hawkbit-rabbitmq
+        vault_path: apps/int/infrastructure/hawkbit
+        keys: [rabbitmq-password, rabbitmq-erlang-cookie]
+      - name: hawkbit-gui-secret
+        managed_by: ExternalSecret/hawkbit-gui
+        vault_path: apps/int/infrastructure/hawkbit
+        keys: [NEXTAUTH_SECRET]
+
+  aws:
+    rds: aurora_mysql  # dynamic credentials via Vault DB secrets engine
+    rds_host: hawkbit.database.int.aws.lvt.cloud
+    rds_ca_configmap: rds-ca-bundle  # in cluster-resources/env/int/hawkbit/
+
+stg:
+  note: WIP — files exist on argocd branch hawkbit-prd, not yet merged to main
+  github:
+    argocd:
+      repo: liveviewtech/argocd
+      argocd_instance: new  # argo/v3/
+      branch: hawkbit-prd  # WIP; not on main yet
+      applicationset: argo/v3/infra-hawkbit.yaml
+      cluster_name: stage  # name used in AppSet generators
+      values: values/infrastructure/hawkbit/stg.yaml  # exists on hawkbit-prd branch
+      external_secrets_file: cluster-resources/env/stage/external-secrets/secrets.yaml  # exists on hawkbit-prd branch
+      extra_k8s_manifests:
+        - cluster-resources/env/stage/hawkbit/rds-ca-configmap.yaml  # MISSING — not in hawkbit-prd
+
+  vault:
+    kv_path: apps/stage/hawkbit  # MISSING — populate before deploying
+    dynamic_db_secrets_engine: vault-terraform/terraform/secrets_engines/hawkbit-stage/  # tf defined, not yet applied
+    k8s_auth_role: app-hawkbit  # tf defined, not yet applied
+    policy_file: vault-terraform/terraform/policies/application/app-hawkbit-stage.hcl
+    dynamic_creds_paths:
+      - application-db/creds/hawkbit-stage-app-rw
+      - application-db/creds/hawkbit-stage-app-ro
+
+  kubernetes:
+    cluster_context: stage
+    namespace: hawkbit
+    hostname: hawkbit.stage.lvt.services
+    hawkbitgui_hostname: hawkbitgui.stage.lvt.services
+    argocd_app: hawkbit-stage  # not yet deployed
+    secrets:
+      - name: hawkbit-db-rw
+        managed_by: VaultDynamicSecret/hawkbit-db-rw
+        vault_creds_path: application-db/creds/hawkbit-stage-app-rw
+      - name: hawkbit-db-secret
+        managed_by: ExternalSecret/hawkbit-db
+        keys: [SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD]
+      - name: hawkbit-user-secret
+        managed_by: ExternalSecret/hawkbit-user
+        vault_path: apps/stage/hawkbit
+        keys: [password, application-user-credentials.yaml]
+      - name: hawkbit-rabbitmq-secret
+        managed_by: ExternalSecret/hawkbit-rabbitmq
+        vault_path: apps/stage/hawkbit
+        keys: [rabbitmq-password, rabbitmq-erlang-cookie]
+      - name: hawkbit-gui-secret
+        managed_by: ExternalSecret/hawkbit-gui
+        vault_path: apps/stage/hawkbit
+        keys: [NEXTAUTH_SECRET]
+
+  aws:
+    rds: aurora_mysql
+    rds_host: hawkbit.database.stg.aws.lvt.cloud
+    rds_ca_configmap: rds-ca-bundle  # MISSING — create before deploying
+
+prd:
+  note: WIP — files exist on argocd branch hawkbit-prd, not yet merged to main
+  github:
+    argocd:
+      repo: liveviewtech/argocd
+      argocd_instance: new  # argo/v3/
+      branch: hawkbit-prd  # WIP; not on main yet
+      applicationset: argo/v3/infra-hawkbit.yaml
+      cluster_name: production  # name used in AppSet generators
+      values: values/infrastructure/hawkbit/prd.yaml  # exists on hawkbit-prd branch
+      external_secrets_file: cluster-resources/env/prod/external-secrets/secrets.yaml  # exists on hawkbit-prd branch
+      extra_k8s_manifests:
+        - cluster-resources/env/prod/hawkbit/rds-ca-configmap.yaml  # MISSING — not in hawkbit-prd
+
+  vault:
+    kv_path: apps/prod/hawkbit  # MISSING — populate before deploying
+    dynamic_db_secrets_engine: vault-terraform/terraform/secrets_engines/hawkbit-prod/  # tf defined, not yet applied
+    k8s_auth_role: app-hawkbit  # tf defined, not yet applied
+    policy_file: vault-terraform/terraform/policies/application/app-hawkbit-prod.hcl
+    dynamic_creds_paths:
+      - application-db/creds/hawkbit-prod-app-rw
+      - application-db/creds/hawkbit-prod-app-ro
+
+  kubernetes:
+    cluster_context: prd
+    namespace: hawkbit
+    hostname: hawkbit.prod.lvt.services
+    hawkbitgui_hostname: hawkbitgui.prod.lvt.services
+    argocd_app: hawkbit-production  # not yet deployed
+    secrets:
+      - name: hawkbit-db-rw
+        managed_by: VaultDynamicSecret/hawkbit-db-rw
+        vault_creds_path: application-db/creds/hawkbit-prod-app-rw
+      - name: hawkbit-db-secret
+        managed_by: ExternalSecret/hawkbit-db
+        keys: [SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD]
+      - name: hawkbit-user-secret
+        managed_by: ExternalSecret/hawkbit-user
+        vault_path: apps/prod/hawkbit
+        keys: [password, application-user-credentials.yaml]
+      - name: hawkbit-rabbitmq-secret
+        managed_by: ExternalSecret/hawkbit-rabbitmq
+        vault_path: apps/prod/hawkbit
+        keys: [rabbitmq-password, rabbitmq-erlang-cookie]
+      - name: hawkbit-gui-secret
+        managed_by: ExternalSecret/hawkbit-gui
+        vault_path: apps/prod/hawkbit
+        keys: [NEXTAUTH_SECRET]
+
+  aws:
+    rds: aurora_mysql
+    rds_host: hawkbit.database.prd.aws.lvt.cloud
+    rds_ca_configmap: rds-ca-bundle  # MISSING — create before deploying
