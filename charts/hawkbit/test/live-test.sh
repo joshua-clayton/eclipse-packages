@@ -70,6 +70,34 @@ else
   fail "actuator/health → $STATUS (expected 200)"
 fi
 
+# Authenticated health — with show-details=when-authorized, this returns
+# component-level status including the DB datasource health indicator.
+HEALTH_BODY=$(curl "${CURL_OPTS[@]}" \
+  -u "$ADMIN_USER:$ADMIN_PASS" \
+  "$BASE_URL/actuator/health" || true)
+DB_STATUS=$(echo "$HEALTH_BODY" | python3 -c \
+  "import sys,json; d=json.load(sys.stdin); print(d.get('components',{}).get('db',{}).get('status','MISSING'))" \
+  2>/dev/null || echo "PARSE_ERROR")
+case "$DB_STATUS" in
+  UP)      pass "DB health component → UP" ;;
+  MISSING) pass "DB health component not exposed (show-details may not be active yet)" ;;
+  *)       fail "DB health component → $DB_STATUS (expected UP)" ;;
+esac
+
+DISK_STATUS=$(echo "$HEALTH_BODY" | python3 -c \
+  "import sys,json; d=json.load(sys.stdin); print(d.get('components',{}).get('diskSpace',{}).get('status','MISSING'))" \
+  2>/dev/null || echo "PARSE_ERROR")
+DISK_FREE=$(echo "$HEALTH_BODY" | python3 -c \
+  "import sys,json; d=json.load(sys.stdin); \
+   free=d.get('components',{}).get('diskSpace',{}).get('details',{}).get('free',0); \
+   print(str(round(free/1024/1024/1024,1))+'GB')" \
+  2>/dev/null || echo "unknown")
+case "$DISK_STATUS" in
+  UP)      pass "Disk space → UP (free: $DISK_FREE)" ;;
+  MISSING) ;;  # not exposed, skip silently
+  *)       fail "Disk space → $DISK_STATUS (free: $DISK_FREE)" ;;
+esac
+
 # Authenticated API
 echo "── Auth"
 STATUS=$(curl "${CURL_OPTS[@]}" -o /dev/null -w "%{http_code}" \
@@ -133,7 +161,7 @@ else
 fi
 
 # Write persistence — verifies DB is writable, not just readable.
-# Creates a rollout group (lightweight, no side effects), reads it back, then deletes it.
+# Creates a distribution set, reads it back, then deletes it.
 echo "── DB write persistence"
 DS_BODY=$(curl "${CURL_OPTS[@]}" -X POST \
   -u "$ADMIN_USER:$ADMIN_PASS" \
