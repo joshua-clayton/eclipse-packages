@@ -182,6 +182,10 @@ Appends .Values.extraEnv (must be a list of k8s env var objects) when set.
 - name: SPRING_FLYWAY_ENABLED
   value: "false"
 {{- include "hawkbit.dbCredentialsEnv" . }}
+{{- if .Values.vaultAgent.enabled }}
+- name: SPRING_CONFIG_ADDITIONAL_LOCATION
+  value: "optional:file:/vault/secrets/"
+{{- end }}
 {{- if .Values.fileStorage.enabled }}
 - name: ORG_ECLIPSE_HAWKBIT_ARTIFACT_FS_PATH
   value: {{ .Values.fileStorage.mountPath }}
@@ -197,15 +201,51 @@ Appends .Values.extraEnv (must be a list of k8s env var objects) when set.
 
 {{/*
 envFrom items for internal or external database credentials.
+Skipped when externalDatabase.mountCredentialsSecret=false — use this when
+credentials are provided through an external mechanism (e.g. a sidecar that
+injects them as a file read via spring.config.import).
 */}}
 {{- define "hawkbit.dbEnvFrom" -}}
-{{- if not .Values.mariadb.enabled }}
+{{- if and (not .Values.mariadb.enabled) .Values.externalDatabase.mountCredentialsSecret }}
 - secretRef:
     name: {{ include "hawkbit.dbCredentialsSecretName" . }}
 {{- end }}
 {{- end -}}
 
+{{/*
+Merge per-service autoscaling overrides with the shared microservices.autoscaling defaults.
+Usage: include "hawkbit.autoscaling" (dict "svc" .Values.microservices.mgmt "defaults" .Values.microservices.autoscaling)
+Returns a single autoscaling map with per-service keys taking precedence.
+*/}}
 {{- define "hawkbit.autoscaling" -}}
 {{- $merged := merge (default dict .svc.autoscaling) .defaults -}}
 {{- toYaml $merged -}}
+{{- end -}}
+
+{{/*
+ServiceAccount name for pods.
+*/}}
+{{- define "hawkbit.serviceAccountName" -}}
+{{- .Values.serviceAccount.name | default "" }}
+{{- end -}}
+
+{{/*
+Vault Agent Injector annotations for dynamic DB credential injection.
+Renders a Spring Boot .properties file to /vault/secrets/ containing
+spring.datasource.username and spring.datasource.password.
+Set externalDatabase.mountCredentialsSecret: false alongside this to prevent
+the k8s secret envFrom from taking precedence over the injected file.
+*/}}
+{{- define "hawkbit.vaultAgentAnnotations" -}}
+{{- if .Values.vaultAgent.enabled }}
+vault.hashicorp.com/agent-inject: "true"
+vault.hashicorp.com/role: {{ .Values.vaultAgent.role | quote }}
+vault.hashicorp.com/agent-inject-secret-db.properties: {{ .Values.vaultAgent.dbCredsPath | quote }}
+vault.hashicorp.com/agent-inject-template-db.properties: |
+  {{`{{- with secret "`}}{{ .Values.vaultAgent.dbCredsPath }}{{`" }}
+  spring.datasource.username={{ .Data.username }}
+  spring.datasource.password={{ .Data.password }}
+  {{- end }}`}}
+vault.hashicorp.com/agent-revoke-on-shutdown: "true"
+{{- end }}
 {{- end -}}

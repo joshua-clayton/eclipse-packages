@@ -18,8 +18,15 @@ spec:
         app.kubernetes.io/name: {{ include "hawkbit.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/component: db-migrate
+      {{- with .Values.job.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       restartPolicy: Never
+      {{- with (include "hawkbit.serviceAccountName" .) }}
+      serviceAccountName: {{ . }}
+      {{- end }}
       containers:
         - name: db-migrate
           image: "{{ .Values.image.initContainer }}:{{ .Values.image.tag }}"
@@ -32,6 +39,10 @@ spec:
             - name: SPRING_DATASOURCE_URL
               value: {{ include "hawkbit.database.url" . | quote }}
             {{- include "hawkbit.dbCredentialsEnv" . | nindent 12 }}
+            {{- if .Values.vaultAgent.enabled }}
+            - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+              value: "optional:file:/vault/secrets/"
+            {{- end }}
           envFrom:
             {{- include "hawkbit.dbEnvFrom" . | nindent 12 }}
           volumeMounts:

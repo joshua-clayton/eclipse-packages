@@ -29,6 +29,12 @@ auth:
 
 replicaCount: 1
 
+serviceAccount:
+  name: ""
+
+job:
+  podAnnotations: {}
+
 ## podDisruptionBudget configuration
 podDisruptionBudget:
   enabled: false
@@ -86,6 +92,16 @@ fileStorage:
   enabled: true
   pvcSize: "1Gi"
   mountPath: "/artifactrepo"
+
+## Vault Agent Injector — inject dynamic DB credentials as a Spring properties file.
+## When enabled, set externalDatabase.mountCredentialsSecret: false so the k8s secret
+## envFrom is not mounted (it would otherwise take precedence over the file).
+vaultAgent:
+  enabled: false
+  # Vault k8s auth role bound to the hawkbit service account.
+  role: ""
+  # Vault path to dynamic DB credentials, e.g. application-db/creds/hawkbit-int-app-rw
+  dbCredsPath: ""
 
 # optional env vars
 extraEnv: []
@@ -151,6 +167,10 @@ externalDatabase:
   password: ""  # used when existingSecret is not set
   url: ""  # optional: override the full JDBC URL
   existingSecret: ""  # must contain keys: SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD
+  # Set to false when credentials are provided by an external mechanism (e.g. a
+  # file-injecting sidecar). Prevents the credentials secret from being mounted
+  # as envFrom, which would otherwise take precedence over file-based sources.
+  mountCredentialsSecret: true
 
 ## ref: https://github.com/CloudPirates-io/helm-charts/tree/main/charts/mariadb
 mariadb:
