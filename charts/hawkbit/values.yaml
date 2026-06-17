@@ -192,6 +192,13 @@ rabbitmq:
 ## Microservices mode — deploy mgmt, ddi, dmf as separate pods instead of the monolith
 microservices:
   enabled: false
+  # Default autoscaling config applied to all services unless overridden per-service.
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
   mgmt:
     image:
       repository: "hawkbit/hawkbit-mgmt-server"

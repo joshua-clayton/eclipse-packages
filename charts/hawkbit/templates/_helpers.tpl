@@ -204,3 +204,8 @@ envFrom items for internal or external database credentials.
     name: {{ include "hawkbit.dbCredentialsSecretName" . }}
 {{- end }}
 {{- end -}}
+
+{{- define "hawkbit.autoscaling" -}}
+{{- $merged := merge (default dict .svc.autoscaling) .defaults -}}
+{{- toYaml $merged -}}
+{{- end -}}

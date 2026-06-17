@@ -1,0 +1,41 @@
+{{- if .Values.microservices.enabled }}
+{{- $root := . }}
+{{- $defaults := .Values.microservices.autoscaling }}
+{{- range $svcName, $svcCfg := dict "mgmt" .Values.microservices.mgmt "ddi" .Values.microservices.ddi "dmf" .Values.microservices.dmf }}
+{{- $hpa := merge (default dict $svcCfg.autoscaling) $defaults }}
+{{- if $hpa.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "hawkbit.fullname" $root }}-{{ $svcName }}
+  labels:
+{{ include "hawkbit.labels" $root | indent 4 }}
+    app.kubernetes.io/component: {{ $svcName }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "hawkbit.fullname" $root }}-{{ $svcName }}
+  minReplicas: {{ $hpa.minReplicas }}
+  maxReplicas: {{ $hpa.maxReplicas }}
+  metrics:
+    {{- if $hpa.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $hpa.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if $hpa.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ $hpa.targetMemoryUtilizationPercentage }}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

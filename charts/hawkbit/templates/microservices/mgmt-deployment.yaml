@@ -7,9 +7,12 @@ metadata:
 {{ include "hawkbit.labels" . | indent 4 }}
     app.kubernetes.io/component: mgmt
 spec:
+  {{- $hpa := merge (default dict .Values.microservices.mgmt.autoscaling) .Values.microservices.autoscaling }}
+  {{- if not $hpa.enabled }}
   replicas: {{ .Values.microservices.mgmt.replicaCount }}
+  {{- end }}
   strategy:
-    type: Recreate
+    type: RollingUpdate
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ include "hawkbit.name" . }}
