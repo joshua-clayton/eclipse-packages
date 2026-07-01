@@ -105,7 +105,7 @@ vaultAgent:
 
 # optional env vars
 extraEnv: []
-# - name: JAVA_TOOL_OPTIONS:
+# - name: JAVA_TOOL_OPTIONS
 #   value: "-Xms1024m -Xmx1024m"
 
 resources: {}
