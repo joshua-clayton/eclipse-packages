@@ -59,6 +59,10 @@ spec:
           imagePullPolicy: {{ .Values.microservices.ddi.image.pullPolicy }}
           env:
             {{- include "hawkbit.env" . | nindent 12 }}
+            {{- if .Values.microservices.ddi.mtlsConfig }}
+            - name: PROFILES
+              value: {{ printf "%s,ddi-mtls" (include "hawkbit.spring.profiles" .) | quote }}
+            {{- end }}
           envFrom:
             {{- include "hawkbit.dbEnvFrom" . | nindent 12 }}
             - secretRef:
