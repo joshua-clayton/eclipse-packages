@@ -67,16 +67,21 @@ spec:
             - name: http
               containerPort: 8081
               protocol: TCP
+            {{- if .Values.microservices.ddi.metricsPort }}
+            - name: metrics
+              containerPort: {{ .Values.microservices.ddi.metricsPort }}
+              protocol: TCP
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
-              port: http
+              port: {{ .Values.microservices.ddi.metricsPort | default "http" }}
             initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
             timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
-              port: http
+              port: {{ .Values.microservices.ddi.metricsPort | default "http" }}
             initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
             timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
           volumeMounts:
