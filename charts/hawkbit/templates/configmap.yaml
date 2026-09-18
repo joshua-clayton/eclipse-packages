@@ -42,8 +42,3 @@ data:
     {{- end -}}
     {{- $importConfig := dict "spring" (dict "config" (dict "import" (list "optional:file:/secret-config/application-user-credentials.yaml"))) -}}
     {{- mergeOverwrite (deepCopy .Values.config.application) $rabbitmqConfig $authConfig $importConfig | toYaml | nindent 4 }}
-    {{- if .Values.microservices.ddi.mtlsConfig }}
-    ---
-    {{- $activateProfile := dict "spring" (dict "config" (dict "activate" (dict "on-profile" "ddi-mtls"))) -}}
-    {{- mergeOverwrite (deepCopy .Values.microservices.ddi.mtlsConfig) $activateProfile | toYaml | nindent 4 }}
-    {{- end }}

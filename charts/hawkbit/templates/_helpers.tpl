@@ -213,6 +213,56 @@ injects them as a file read via spring.config.import).
 {{- end -}}
 
 {{/*
+TLS/mTLS env vars for a component's serving container.
+Takes a dict: {tls: <component's .tls value>, metricsPort: <component's .metricsPort value>}.
+mtls (client-cert auth) is only meaningful once tls itself is enabled, so it's nested
+under tls rather than a sibling of it. metricsPort, when set, moves actuator health
+checks off the TLS-enabled main port so kubelet's plain-HTTP probes keep working.
+*/}}
+{{- define "hawkbit.tlsEnv" -}}
+{{- $tls := .tls | default dict -}}
+{{- if $tls.enabled }}
+- name: SERVER_SSL_ENABLED
+  value: "true"
+- name: SERVER_SSL_CERTIFICATE
+  value: {{ $tls.certFile | quote }}
+- name: SERVER_SSL_CERTIFICATE_PRIVATE_KEY
+  value: {{ $tls.keyFile | quote }}
+{{- $mtls := $tls.mtls | default dict }}
+{{- if $mtls.enabled }}
+- name: SERVER_SSL_CLIENT_AUTH
+  value: {{ $mtls.clientAuth | default "need" | quote }}
+- name: SERVER_SSL_TRUST_CERTIFICATE
+  value: {{ $mtls.caFile | quote }}
+{{- end }}
+{{- if .metricsPort }}
+- name: MANAGEMENT_SERVER_PORT
+  value: {{ .metricsPort | quote }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Extra "metrics" containerPort for a component, when metricsPort is set.
+Pass a dict: {metricsPort: <component's .metricsPort value>}.
+*/}}
+{{- define "hawkbit.metricsPort" -}}
+{{- if .metricsPort }}
+- name: metrics
+  containerPort: {{ .metricsPort }}
+  protocol: TCP
+{{- end }}
+{{- end -}}
+
+{{/*
+Which named/numbered port liveness/readiness probes should target: the component's
+metricsPort if set, otherwise the default "http" port.
+*/}}
+{{- define "hawkbit.probePort" -}}
+{{- .metricsPort | default "http" -}}
+{{- end -}}
+
+{{/*
 Merge per-service autoscaling overrides with the shared microservices.autoscaling defaults.
 Usage: include "hawkbit.autoscaling" (dict "svc" .Values.microservices.mgmt "defaults" .Values.microservices.autoscaling)
 Returns a single autoscaling map with per-service keys taking precedence.

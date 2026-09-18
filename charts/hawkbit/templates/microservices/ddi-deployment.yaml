@@ -58,11 +58,11 @@ spec:
           image: "{{ .Values.microservices.ddi.image.repository }}:{{ .Values.microservices.ddi.image.tag }}"
           imagePullPolicy: {{ .Values.microservices.ddi.image.pullPolicy }}
           env:
-            {{- include "hawkbit.env" . | nindent 12 }}
-            {{- if .Values.microservices.ddi.mtlsConfig }}
-            - name: PROFILES
-              value: {{ printf "%s,ddi-mtls" (include "hawkbit.spring.profiles" .) | quote }}
+            {{- $tlsEnv := include "hawkbit.tlsEnv" (dict "tls" .Values.microservices.ddi.tls "metricsPort" .Values.microservices.ddi.metricsPort) }}
+            {{- if $tlsEnv }}
+            {{ $tlsEnv | nindent 12 }}
             {{- end }}
+            {{- include "hawkbit.env" . | nindent 12 }}
           envFrom:
             {{- include "hawkbit.dbEnvFrom" . | nindent 12 }}
             - secretRef:
@@ -71,21 +71,20 @@ spec:
             - name: http
               containerPort: 8081
               protocol: TCP
-            {{- if .Values.microservices.ddi.metricsPort }}
-            - name: metrics
-              containerPort: {{ .Values.microservices.ddi.metricsPort }}
-              protocol: TCP
+            {{- $metricsPort := include "hawkbit.metricsPort" (dict "metricsPort" .Values.microservices.ddi.metricsPort) }}
+            {{- if $metricsPort }}
+            {{ $metricsPort | nindent 12 }}
             {{- end }}
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
-              port: {{ .Values.microservices.ddi.metricsPort | default "http" }}
+              port: {{ include "hawkbit.probePort" (dict "metricsPort" .Values.microservices.ddi.metricsPort) }}
             initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
             timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
-              port: {{ .Values.microservices.ddi.metricsPort | default "http" }}
+              port: {{ include "hawkbit.probePort" (dict "metricsPort" .Values.microservices.ddi.metricsPort) }}
             initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
             timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
           volumeMounts:
