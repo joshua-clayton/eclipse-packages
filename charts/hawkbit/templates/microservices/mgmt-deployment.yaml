@@ -43,7 +43,7 @@ spec:
           env:
             {{- include "hawkbit.env" . | nindent 12 }}
           envFrom:
-            {{- include "hawkbit.dbEnvFrom" . | nindent 12 }}
+            {{- include "hawkbit.dbEnvFrom" . }}
           volumeMounts:
             - name: configmap
               mountPath: {{ .Values.configMap.mountPath }}
@@ -64,11 +64,11 @@ spec:
           env:
             {{- $tlsEnv := include "hawkbit.tlsEnv" (dict "tls" .Values.microservices.mgmt.tls "metricsPort" .Values.microservices.mgmt.metricsPort) }}
             {{- if $tlsEnv }}
-            {{ $tlsEnv | nindent 12 }}
+            {{- nindent 12 $tlsEnv }}
             {{- end }}
             {{- include "hawkbit.env" . | nindent 12 }}
           envFrom:
-            {{- include "hawkbit.dbEnvFrom" . | nindent 12 }}
+            {{- include "hawkbit.dbEnvFrom" . }}
             - secretRef:
                 name: {{ include "hawkbit.rabbitmqCredentialsSecretName" . }}
           ports:
@@ -77,7 +77,7 @@ spec:
               protocol: TCP
             {{- $metricsPort := include "hawkbit.metricsPort" (dict "metricsPort" .Values.microservices.mgmt.metricsPort) }}
             {{- if $metricsPort }}
-            {{ $metricsPort | nindent 12 }}
+            {{- nindent 12 $metricsPort }}
             {{- end }}
           livenessProbe:
             httpGet:

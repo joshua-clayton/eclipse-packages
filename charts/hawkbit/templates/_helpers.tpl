@@ -207,8 +207,8 @@ injects them as a file read via spring.config.import).
 */}}
 {{- define "hawkbit.dbEnvFrom" -}}
 {{- if and (not .Values.mariadb.enabled) .Values.externalDatabase.mountCredentialsSecret }}
-- secretRef:
-    name: {{ include "hawkbit.dbCredentialsSecretName" . }}
+            - secretRef:
+                name: {{ include "hawkbit.dbCredentialsSecretName" . }}
 {{- end }}
 {{- end -}}
 
@@ -223,7 +223,7 @@ the main server's SSL config onto the management port too.
 */}}
 {{- define "hawkbit.tlsEnv" -}}
 {{- $tls := .tls | default dict -}}
-{{- if $tls.enabled }}
+{{- if $tls.enabled -}}
 - name: SERVER_SSL_ENABLED
   value: "true"
 - name: SERVER_SSL_CERTIFICATE
@@ -251,7 +251,7 @@ Extra "metrics" containerPort for a component, when metricsPort is set.
 Pass a dict: {metricsPort: <component's .metricsPort value>}.
 */}}
 {{- define "hawkbit.metricsPort" -}}
-{{- if .metricsPort }}
+{{- if .metricsPort -}}
 - name: metrics
   containerPort: {{ .metricsPort }}
   protocol: TCP
