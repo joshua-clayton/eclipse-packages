@@ -217,7 +217,9 @@ TLS/mTLS env vars for a component's serving container.
 Takes a dict: {tls: <component's .tls value>, metricsPort: <component's .metricsPort value>}.
 mtls (client-cert auth) is only meaningful once tls itself is enabled, so it's nested
 under tls rather than a sibling of it. metricsPort, when set, moves actuator health
-checks off the TLS-enabled main port so kubelet's plain-HTTP probes keep working.
+checks off the TLS-enabled main port so kubelet's plain-HTTP probes keep working;
+management.server.ssl is explicitly disabled since Spring Boot otherwise inherits
+the main server's SSL config onto the management port too.
 */}}
 {{- define "hawkbit.tlsEnv" -}}
 {{- $tls := .tls | default dict -}}
@@ -238,6 +240,8 @@ checks off the TLS-enabled main port so kubelet's plain-HTTP probes keep working
 {{- if .metricsPort }}
 - name: MANAGEMENT_SERVER_PORT
   value: {{ .metricsPort | quote }}
+- name: MANAGEMENT_SERVER_SSL_ENABLED
+  value: "false"
 {{- end }}
 {{- end }}
 {{- end -}}
