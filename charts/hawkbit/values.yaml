@@ -30,7 +30,13 @@ auth:
 replicaCount: 1
 
 serviceAccount:
+  # Set to false if the ServiceAccount is managed outside this chart (e.g. by
+  # Terraform, so an external identity-binding mechanism such as EKS Pod
+  # Identity can reference it without the chart racing to also create it).
+  create: true
   name: ""
+  annotations: {}
+  labels: {}
 
 job:
   podAnnotations: {}

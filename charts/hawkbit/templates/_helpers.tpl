@@ -166,6 +166,9 @@ DB credential env vars for the mariadb case, injected via secretKeyRef.
     secretKeyRef:
       name: {{ include "mariadb.secretName" .Subcharts.mariadb }}
       key: {{ .Values.mariadb.auth.secretKeys.rootPasswordKey | default "mysql-root-password" }}
+{{- else if and (not .Values.externalDatabase.existingSecret) .Values.externalDatabase.user }}
+- name: SPRING_DATASOURCE_USERNAME
+  value: {{ .Values.externalDatabase.user | quote }}
 {{- end }}
 {{- end -}}
 
@@ -277,10 +280,15 @@ Returns a single autoscaling map with per-service keys taking precedence.
 {{- end -}}
 
 {{/*
-ServiceAccount name for pods.
+ServiceAccount name for pods. Falls back to the chart's fullname when
+serviceAccount.create is true and no name is given.
 */}}
 {{- define "hawkbit.serviceAccountName" -}}
-{{- .Values.serviceAccount.name | default "" }}
+{{- if .Values.serviceAccount.create -}}
+{{- .Values.serviceAccount.name | default (include "hawkbit.fullname" .) -}}
+{{- else -}}
+{{- .Values.serviceAccount.name | default "" -}}
+{{- end -}}
 {{- end -}}
 
 {{/*
