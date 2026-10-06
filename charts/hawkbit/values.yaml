@@ -40,6 +40,24 @@ serviceAccount:
 
 job:
   podAnnotations: {}
+  # Optional: ServiceAccount for the db-migrate Job only. Defaults to the main
+  # serviceAccount (serviceAccountName above) when unset. Set this when the
+  # migrate Job must run as a distinct DB user with its own IAM identity (e.g.
+  # a user with DDL privileges, separate from the app's runtime DML-only user).
+  serviceAccountName: ""
+  migrate:
+    # Whether the chart manages the Flyway migrate Job automatically.
+    # Set to false to handle migrations manually outside the chart; no Job
+    # is rendered at all.
+    enabled: true
+    # When enabled above, whether the Job is skipped on a sync where
+    # Chart.yaml's appVersion hasn't changed. Default true: the Job is
+    # named/tracked per appVersion and left in place after succeeding, so it
+    # only re-runs when appVersion changes (a later sync with the same
+    # appVersion finds the prior completed Job and skips it). Failed Jobs
+    # are still cleaned up so they retry on the next sync.
+    # Set to false (e.g. for testing) to always run the Job on every sync.
+    skipIfUnchanged: true
 
 ## podDisruptionBudget configuration
 podDisruptionBudget:
@@ -172,6 +190,12 @@ externalDatabase:
   user: ""
   password: ""  # used when existingSecret is not set
   url: ""  # optional: override the full JDBC URL
+  # Optional: distinct username/URL for the db-migrate Job only. Each falls
+  # back to user/url above when unset. Set these when the migrate Job must
+  # connect as a different DB user than the app (e.g. one with DDL
+  # privileges, so the app's runtime user can be scoped to DML only).
+  migrateUser: ""
+  migrateUrl: ""
   existingSecret: ""  # must contain keys: SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD
   # Set to false when credentials are provided by an external mechanism (e.g. a
   # file-injecting sidecar). Prevents the credentials secret from being mounted

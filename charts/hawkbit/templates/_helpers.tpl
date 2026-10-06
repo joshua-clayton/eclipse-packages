@@ -108,6 +108,18 @@ Database helpers — switch between externalDatabase and the bundled mariadb sub
   {{- end -}}
 {{- end -}}
 
+{{/*
+JDBC URL for the db-migrate Job. Falls back to hawkbit.database.url when
+externalDatabase.migrateUrl is unset.
+*/}}
+{{- define "hawkbit.database.migrateUrl" -}}
+  {{- if .Values.externalDatabase.migrateUrl -}}
+    {{- .Values.externalDatabase.migrateUrl -}}
+  {{- else -}}
+    {{- include "hawkbit.database.url" . -}}
+  {{- end -}}
+{{- end -}}
+
 {{- define "hawkbit.database.user" -}}
   {{- if .Values.externalDatabase.user -}}
     {{- .Values.externalDatabase.user -}}
@@ -156,20 +168,29 @@ Database helpers — switch between externalDatabase and the bundled mariadb sub
 
 {{/*
 DB credential env vars for the mariadb case, injected via secretKeyRef.
+Takes a dict: {root: $, user: <override username, optional>}. "user" falls
+back to externalDatabase.user when unset; used by the db-migrate Job to
+connect as a distinct DB user (see externalDatabase.migrateUser).
 */}}
-{{- define "hawkbit.dbCredentialsEnv" -}}
-{{- if .Values.mariadb.enabled }}
+{{- define "hawkbit.dbCredentialsEnvFor" -}}
+{{- $root := .root -}}
+{{- $user := .user | default $root.Values.externalDatabase.user -}}
+{{- if $root.Values.mariadb.enabled }}
 - name: SPRING_DATASOURCE_USERNAME
   value: "root"
 - name: SPRING_DATASOURCE_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: {{ include "mariadb.secretName" .Subcharts.mariadb }}
-      key: {{ .Values.mariadb.auth.secretKeys.rootPasswordKey | default "mysql-root-password" }}
-{{- else if and (not .Values.externalDatabase.existingSecret) .Values.externalDatabase.user }}
+      name: {{ include "mariadb.secretName" $root.Subcharts.mariadb }}
+      key: {{ $root.Values.mariadb.auth.secretKeys.rootPasswordKey | default "mysql-root-password" }}
+{{- else if and (not $root.Values.externalDatabase.existingSecret) $user }}
 - name: SPRING_DATASOURCE_USERNAME
-  value: {{ .Values.externalDatabase.user | quote }}
+  value: {{ $user | quote }}
 {{- end }}
+{{- end -}}
+
+{{- define "hawkbit.dbCredentialsEnv" -}}
+{{- include "hawkbit.dbCredentialsEnvFor" (dict "root" .) -}}
 {{- end -}}
 
 {{/*
@@ -289,6 +310,16 @@ serviceAccount.create is true and no name is given.
 {{- else -}}
 {{- .Values.serviceAccount.name | default "" -}}
 {{- end -}}
+{{- end -}}
+
+{{/*
+ServiceAccount name for the db-migrate Job. Falls back to the main
+serviceAccountName when job.serviceAccountName is unset. This chart never
+creates this ServiceAccount itself (it's expected to be managed externally,
+same as serviceAccount.create: false).
+*/}}
+{{- define "hawkbit.job.serviceAccountName" -}}
+{{- .Values.job.serviceAccountName | default (include "hawkbit.serviceAccountName" .) -}}
 {{- end -}}
 
 {{/*
