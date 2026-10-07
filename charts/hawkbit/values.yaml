@@ -26,6 +26,14 @@ auth:
   username: "admin"
   password: "{noop}admin"
   dmfPassword: "[KEYCLOAK_HAWKBIT_USER_PASSWORD]"
+  # gateway token authentication
+  gatewayToken:
+    enabled: false
+    name: ""
+    key: ""
+    # use an existing secret for key instead; must contain existingSecretKey
+    existingSecret: ""
+    existingSecretKey: "key"
 
 replicaCount: 1
 

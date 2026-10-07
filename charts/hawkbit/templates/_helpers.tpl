@@ -194,6 +194,21 @@ connect as a distinct DB user (see externalDatabase.migrateUser).
 {{- end -}}
 
 {{/*
+Gateway token key env var, sourced from an existing secret when
+auth.gatewayToken.existingSecret is set. Omitted otherwise (the literal
+value, if any, is instead rendered into application-user-credentials.yaml).
+*/}}
+{{- define "hawkbit.gatewayTokenEnv" -}}
+{{- if and .Values.auth.gatewayToken.enabled .Values.auth.gatewayToken.existingSecret }}
+- name: HAWKBIT_SERVER_DDI_SECURITY_AUTHENTICATION_GATEWAYTOKEN_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.auth.gatewayToken.existingSecret }}
+      key: {{ .Values.auth.gatewayToken.existingSecretKey | default "key" }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Environment variables shared by all hawkbit containers (init and application).
 All vars are either used by both or safely ignored by whichever doesn't need them.
 Appends .Values.extraEnv (must be a list of k8s env var objects) when set.
@@ -206,6 +221,7 @@ Appends .Values.extraEnv (must be a list of k8s env var objects) when set.
 - name: SPRING_FLYWAY_ENABLED
   value: "false"
 {{- include "hawkbit.dbCredentialsEnv" . }}
+{{- include "hawkbit.gatewayTokenEnv" . }}
 {{- if .Values.vaultAgent.enabled }}
 - name: SPRING_CONFIG_ADDITIONAL_LOCATION
   value: "optional:file:/vault/secrets/"
