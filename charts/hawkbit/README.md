@@ -48,6 +48,10 @@ Alternatively, a YAML file that specifies the values for the parameters can be p
 
 When `externalDatabase.url` is empty, the JDBC URL is built from `externalDatabase.host`, `port` and `database`, with `externalDatabase.urlParams` appended as a query string. `externalDatabase.migrateUrlParams` is overlaid on `urlParams` for the db-migrate Job, so the Job can use different connection parameters.
 
+### db-migrate Job naming
+
+With `job.migrate.skipIfUnchanged`, the Job is named `<fullname>-db-migrate-<appVersion>-<hash>`, where the hash covers the Job spec (including `image.tag`). The finished Job is kept and reused while the spec is unchanged; any change creates a new Job and re-runs the migration. Old Jobs are not removed.
+
 ### ServiceAccounts for the db-migrate hook
 
 Set `serviceAccount.preSync: true` to create the ServiceAccounts as ArgoCD PreSync hooks, so they exist before the db-migrate Job runs.

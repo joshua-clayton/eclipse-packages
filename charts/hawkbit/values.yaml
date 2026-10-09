@@ -55,9 +55,9 @@ job:
   migrate:
     # Render the Flyway migrate Job. Set to false to migrate outside the chart.
     enabled: true
-    # Keep the Job after it succeeds so it only re-runs when appVersion
-    # changes. Failed Jobs are deleted and retried. Set to false to run it on
-    # every sync.
+    # Keep the Job after it succeeds; it re-runs only when its spec (including
+    # image.tag) changes. Failed Jobs are deleted and retried. Set to false to
+    # run it on every sync.
     skipIfUnchanged: true
 
 ## podDisruptionBudget configuration

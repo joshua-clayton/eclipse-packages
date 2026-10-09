@@ -1,28 +1,4 @@
-{{- if .Values.job.migrate.enabled }}
-apiVersion: batch/v1
-kind: Job
-metadata:
-  {{- if .Values.job.migrate.skipIfUnchanged }}
-  name: {{ include "hawkbit.fullname" . }}-db-migrate-{{ .Chart.AppVersion | lower | replace "+" "-" | trunc 40 | trimSuffix "-" }}
-  {{- else }}
-  name: {{ include "hawkbit.fullname" . }}-db-migrate
-  {{- end }}
-  labels:
-{{ include "hawkbit.labels" . | indent 4 }}
-  annotations:
-    "helm.sh/hook": pre-install,pre-upgrade
-    "helm.sh/hook-weight": "-5"
-    {{- if .Values.job.migrate.skipIfUnchanged }}
-    # Succeeded Jobs are kept so they are not re-run for the same image.tag.
-    "helm.sh/hook-delete-policy": hook-failed
-    "argocd.argoproj.io/hook": PreSync
-    "argocd.argoproj.io/hook-delete-policy": HookFailed
-    {{- else }}
-    # Always re-run: the prior Job is deleted first.
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
-    "argocd.argoproj.io/hook": PreSync
-    "argocd.argoproj.io/hook-delete-policy": BeforeHookCreation,HookSucceeded,HookFailed
-    {{- end }}
+{{- define "hawkbit.migrateJob.spec" -}}
 spec:
   backoffLimit: 3
   template:
@@ -75,4 +51,32 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+{{- end }}
+
+{{- if .Values.job.migrate.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  {{- if .Values.job.migrate.skipIfUnchanged }}
+  name: {{ printf "%s-db-migrate-%s-%s" (include "hawkbit.fullname" .) (.Chart.AppVersion | lower | replace "+" "-" | trunc 20 | trimSuffix "-") (include "hawkbit.migrateJob.spec" . | sha256sum | trunc 8) }}
+  {{- else }}
+  name: {{ include "hawkbit.fullname" . }}-db-migrate
+  {{- end }}
+  labels:
+{{ include "hawkbit.labels" . | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    {{- if .Values.job.migrate.skipIfUnchanged }}
+    # Kept after success; the name changes with the spec, which re-runs it.
+    "helm.sh/hook-delete-policy": hook-failed
+    "argocd.argoproj.io/hook": PreSync
+    "argocd.argoproj.io/hook-delete-policy": HookFailed
+    {{- else }}
+    # Always re-run: the prior Job is deleted first.
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+    "argocd.argoproj.io/hook": PreSync
+    "argocd.argoproj.io/hook-delete-policy": BeforeHookCreation,HookSucceeded,HookFailed
+    {{- end }}
+{{ include "hawkbit.migrateJob.spec" . }}
 {{- end }}
