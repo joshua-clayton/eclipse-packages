@@ -29,9 +29,6 @@ spec:
         {{- with .Values.podTemplate.annotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-        {{- if .Values.vaultAgent.enabled }}
-        {{- include "hawkbit.vaultAgentAnnotations" . | nindent 8 }}
-        {{- end }}
     spec:
       {{- with (include "hawkbit.serviceAccountName" .) }}
       serviceAccountName: {{ . }}

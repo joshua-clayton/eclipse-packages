@@ -1,0 +1,26 @@
+{{- if .Values.ddiProxy.enabled }}
+{{- $s := .Values.ddiProxy.service }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hawkbit.fullname" . }}-ddi-proxy
+  labels:
+{{ include "hawkbit.labels" . | indent 4 }}
+    app.kubernetes.io/component: ddi-proxy
+  {{- with $s.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ $s.type }}
+  {{- with $s.loadBalancerClass }}
+  loadBalancerClass: {{ . }}
+  {{- end }}
+  ports:
+    - name: https
+      port: {{ $s.port }}
+      targetPort: https
+      protocol: TCP
+  selector:
+    {{- include "hawkbit.ddiProxy.selectorLabels" . | nindent 4 }}
+{{- end }}

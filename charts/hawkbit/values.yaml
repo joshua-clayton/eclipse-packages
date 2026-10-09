@@ -38,33 +38,26 @@ auth:
 replicaCount: 1
 
 serviceAccount:
-  # Set to false if the ServiceAccount is managed outside this chart (e.g. by
-  # Terraform, so an external identity-binding mechanism such as EKS Pod
-  # Identity can reference it without the chart racing to also create it).
+  # Set to false if the ServiceAccount is managed outside this chart.
   create: true
+  # Create the ServiceAccounts as ArgoCD PreSync hooks, ahead of the db-migrate Job.
+  preSync: false
   name: ""
   annotations: {}
   labels: {}
 
 job:
   podAnnotations: {}
-  # Optional: ServiceAccount for the db-migrate Job only. Defaults to the main
-  # serviceAccount (serviceAccountName above) when unset. Set this when the
-  # migrate Job must run as a distinct DB user with its own IAM identity (e.g.
-  # a user with DDL privileges, separate from the app's runtime DML-only user).
+  # ServiceAccount for the db-migrate Job. Defaults to the main ServiceAccount.
   serviceAccountName: ""
+  # Extra env vars for the db-migrate Job, added to extraEnv.
+  extraEnv:
   migrate:
-    # Whether the chart manages the Flyway migrate Job automatically.
-    # Set to false to handle migrations manually outside the chart; no Job
-    # is rendered at all.
+    # Render the Flyway migrate Job. Set to false to migrate outside the chart.
     enabled: true
-    # When enabled above, whether the Job is skipped on a sync where
-    # Chart.yaml's appVersion hasn't changed. Default true: the Job is
-    # named/tracked per appVersion and left in place after succeeding, so it
-    # only re-runs when appVersion changes (a later sync with the same
-    # appVersion finds the prior completed Job and skips it). Failed Jobs
-    # are still cleaned up so they retry on the next sync.
-    # Set to false (e.g. for testing) to always run the Job on every sync.
+    # Keep the Job after it succeeds so it only re-runs when appVersion
+    # changes. Failed Jobs are deleted and retried. Set to false to run it on
+    # every sync.
     skipIfUnchanged: true
 
 ## podDisruptionBudget configuration
@@ -125,20 +118,46 @@ fileStorage:
   pvcSize: "1Gi"
   mountPath: "/artifactrepo"
 
-## Vault Agent Injector — inject dynamic DB credentials as a Spring properties file.
-## When enabled, set externalDatabase.mountCredentialsSecret: false so the k8s secret
-## envFrom is not mounted (it would otherwise take precedence over the file).
-vaultAgent:
+# Additional manifests to render (maps or strings, passed through tpl).
+extraObjects: []
+# - apiVersion: v1
+#   kind: ConfigMap
+#   metadata:
+#     name: "{{ .Release.Name }}-extra"
+#   data:
+#     key: value
+
+# ExternalSecret resources (needs External Secrets CRDs). Target Secret
+# defaults to <name>-secret.
+externalSecrets:
   enabled: false
-  # Vault k8s auth role bound to the hawkbit service account.
-  role: ""
-  # Vault path to dynamic DB credentials, e.g. application-db/creds/hawkbit-int-app-rw
-  dbCredsPath: ""
+  apiVersion: external-secrets.io/v1beta1
+  refreshInterval: 1h
+  secretStoreRef:
+    name: ""
+    kind: ClusterSecretStore
+  key: ""
+  annotations: {}
+  secrets: {}
+  # my-secret:
+  #   targetName: my-secret
+  #   key: path/in/store
+  #   secretStoreRef: {name: other-store}
+  #   data:
+  #     - secretKey: password
+  #       remoteRef: {property: password}
+  #   dataFrom:
+  #     - extract: {}
 
 # optional env vars
-extraEnv: []
+extraEnv:
 # - name: JAVA_TOOL_OPTIONS
 #   value: "-Xms1024m -Xmx1024m"
+# A map of name: value is also accepted:
+# extraEnv:
+#   JAVA_TOOL_OPTIONS: "-Xms1024m -Xmx1024m"
+#   SECRET_THING:
+#     valueFrom: {secretKeyRef: {name: s, key: k}}
 
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -198,16 +217,16 @@ externalDatabase:
   user: ""
   password: ""  # used when existingSecret is not set
   url: ""  # optional: override the full JDBC URL
-  # Optional: distinct username/URL for the db-migrate Job only. Each falls
-  # back to user/url above when unset. Set these when the migrate Job must
-  # connect as a different DB user than the app (e.g. one with DDL
-  # privileges, so the app's runtime user can be scoped to DML only).
+  # User and URL for the db-migrate Job. Each falls back to user/url when unset.
   migrateUser: ""
   migrateUrl: ""
+  # Query parameters appended to the JDBC URL built from host/port/database
+  # (ignored when url is set). migrateUrlParams override urlParams for the
+  # db-migrate Job.
+  urlParams: {}
+  migrateUrlParams: {}
   existingSecret: ""  # must contain keys: SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD
-  # Set to false when credentials are provided by an external mechanism (e.g. a
-  # file-injecting sidecar). Prevents the credentials secret from being mounted
-  # as envFrom, which would otherwise take precedence over file-based sources.
+  # Set to false to skip mounting the credentials secret as envFrom.
   mountCredentialsSecret: true
 
 ## ref: https://github.com/CloudPirates-io/helm-charts/tree/main/charts/mariadb
@@ -278,6 +297,62 @@ microservices:
       pullPolicy: IfNotPresent
     replicaCount: 1
     resources: {}
+
+## Optional nginx TLS proxy in front of the DDI API. Forwards the verified
+## client CN (and an optional issuer hash) as headers.
+ddiProxy:
+  enabled: false
+  image:
+    repository: nginx
+    tag: 1.27-alpine
+    pullPolicy: IfNotPresent
+  replicaCount: 2
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+  spreadAcrossZones: true
+  podAnnotations: {}
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  tls:
+    # Use one: secretName, externalSecret (entry name), or certificate+key.
+    secretName: ""
+    externalSecret: ""
+    certificate: ""
+    key: ""
+  mtls:
+    # on | optional | off
+    verifyClient: optional
+    clientCa:
+      # PEM CA bundle; required if verifyClient is not off, unless configMapName exists.
+      certificate: ""
+      # ConfigMap name; created from certificate if set, else must exist.
+      configMapName: ""
+      key: ca.crt
+    # Sent as the issuer header for verified clients when set.
+    issuerHash: ""
+    headers:
+      clientCn: X-Ssl-Client-Cn
+      issuerHash: X-Ssl-Issuer-Hash-1
+  # Accept the PROXY protocol on the TLS port.
+  proxyProtocol: false
+  maxBodySize: 10g
+  timeouts:
+    read: 3600s
+    send: 3600s
+    keepalive: 75s
+  service:
+    type: ClusterIP
+    port: 443
+    loadBalancerClass: ""
+    annotations: {}
 
 ## hawkbitgui — optional Next.js management UI
 hawkbitgui:

@@ -94,10 +94,8 @@ Return the secret with the Hawkbit credentials.
 Database helpers — switch between externalDatabase and the bundled mariadb subchart.
 */}}
 
-{{- define "hawkbit.database.url" -}}
-  {{- if .Values.externalDatabase.url -}}
-    {{- .Values.externalDatabase.url -}}
-  {{- else if and .Values.externalDatabase.host (eq (.Values.externalDatabase.type | default "mariadb") "postgresql") -}}
+{{- define "hawkbit.database.baseUrl" -}}
+  {{- if and .Values.externalDatabase.host (eq (.Values.externalDatabase.type | default "mariadb") "postgresql") -}}
     {{- printf "jdbc:postgresql://%s:%v/%s" .Values.externalDatabase.host (.Values.externalDatabase.port | default 5432) (.Values.externalDatabase.database | default "hawkbit") -}}
   {{- else if .Values.externalDatabase.host -}}
     {{- printf "jdbc:mariadb://%s:%v/%s" .Values.externalDatabase.host (.Values.externalDatabase.port | default 3306) (.Values.externalDatabase.database | default "hawkbit") -}}
@@ -109,14 +107,45 @@ Database helpers — switch between externalDatabase and the bundled mariadb sub
 {{- end -}}
 
 {{/*
-JDBC URL for the db-migrate Job. Falls back to hawkbit.database.url when
-externalDatabase.migrateUrl is unset.
+Appends a params map to a JDBC URL as a query string (keys sorted).
+*/}}
+{{- define "hawkbit.database.withParams" -}}
+  {{- $pairs := list -}}
+  {{- range $k, $v := .params -}}
+    {{- $pairs = append $pairs (printf "%s=%v" $k $v) -}}
+  {{- end -}}
+  {{- if $pairs -}}
+    {{- printf "%s?%s" .url (join "&" $pairs) -}}
+  {{- else -}}
+    {{- .url -}}
+  {{- end -}}
+{{- end -}}
+
+{{/*
+JDBC URL for the app. externalDatabase.url is used verbatim when set;
+otherwise it is built from host/port/database plus externalDatabase.urlParams.
+*/}}
+{{- define "hawkbit.database.url" -}}
+  {{- if .Values.externalDatabase.url -}}
+    {{- .Values.externalDatabase.url -}}
+  {{- else -}}
+    {{- include "hawkbit.database.withParams" (dict "url" (include "hawkbit.database.baseUrl" .) "params" (.Values.externalDatabase.urlParams | default dict)) -}}
+  {{- end -}}
+{{- end -}}
+
+{{/*
+JDBC URL for the db-migrate Job. externalDatabase.migrateUrl is used verbatim
+when set. Otherwise it falls back to externalDatabase.url when set, or is built
+from host/port/database with urlParams overlaid by migrateUrlParams.
 */}}
 {{- define "hawkbit.database.migrateUrl" -}}
   {{- if .Values.externalDatabase.migrateUrl -}}
     {{- .Values.externalDatabase.migrateUrl -}}
+  {{- else if .Values.externalDatabase.url -}}
+    {{- .Values.externalDatabase.url -}}
   {{- else -}}
-    {{- include "hawkbit.database.url" . -}}
+    {{- $params := merge (deepCopy (.Values.externalDatabase.migrateUrlParams | default dict)) (deepCopy (.Values.externalDatabase.urlParams | default dict)) -}}
+    {{- include "hawkbit.database.withParams" (dict "url" (include "hawkbit.database.baseUrl" .) "params" $params) -}}
   {{- end -}}
 {{- end -}}
 
@@ -209,9 +238,33 @@ value, if any, is instead rendered into application-user-credentials.yaml).
 {{- end -}}
 
 {{/*
+Renders env entries from a list of env var objects or a map of name: value.
+A map value may be a string or a dict of env var fields (e.g. valueFrom).
+Map entries are sorted by name; null values are skipped.
+*/}}
+{{- define "hawkbit.envList" -}}
+{{- if kindIs "slice" . }}
+{{- if . }}
+{{ toYaml . }}
+{{- end }}
+{{- else if kindIs "map" . }}
+{{- range $k := keys . | sortAlpha }}
+{{- $v := get $ $k }}
+{{- if kindIs "map" $v }}
+{{ toYaml (list (merge (dict "name" $k) $v)) }}
+{{- else if not (kindIs "invalid" $v) }}
+{{ toYaml (list (dict "name" $k "value" ($v | toString))) }}
+{{- end }}
+{{- end }}
+{{- else if . }}
+{{- fail (printf "env must be a list or a map (got %s)" (kindOf .)) }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Environment variables shared by all hawkbit containers (init and application).
 All vars are either used by both or safely ignored by whichever doesn't need them.
-Appends .Values.extraEnv (must be a list of k8s env var objects) when set.
+Appends .Values.extraEnv (list of env var objects, or map of name: value) when set.
 */}}
 {{- define "hawkbit.env" -}}
 - name: PROFILES
@@ -222,28 +275,16 @@ Appends .Values.extraEnv (must be a list of k8s env var objects) when set.
   value: "false"
 {{- include "hawkbit.dbCredentialsEnv" . }}
 {{- include "hawkbit.gatewayTokenEnv" . }}
-{{- if .Values.vaultAgent.enabled }}
-- name: SPRING_CONFIG_ADDITIONAL_LOCATION
-  value: "optional:file:/vault/secrets/"
-{{- end }}
 {{- if .Values.fileStorage.enabled }}
 - name: ORG_ECLIPSE_HAWKBIT_ARTIFACT_FS_PATH
   value: {{ .Values.fileStorage.mountPath }}
 {{- end }}
-{{- with .Values.extraEnv }}
-{{- if kindIs "slice" . }}
-{{- toYaml . | nindent 0 }}
-{{- else }}
-{{- fail (printf "extraEnv must be a list of env var objects (got %s). See values.yaml for the supported format." (kindOf .)) }}
-{{- end }}
-{{- end }}
+{{- include "hawkbit.envList" .Values.extraEnv }}
 {{- end -}}
 
 {{/*
 envFrom items for internal or external database credentials.
-Skipped when externalDatabase.mountCredentialsSecret=false — use this when
-credentials are provided through an external mechanism (e.g. a sidecar that
-injects them as a file read via spring.config.import).
+Skipped when externalDatabase.mountCredentialsSecret=false.
 */}}
 {{- define "hawkbit.dbEnvFrom" -}}
 {{- if and (not .Values.mariadb.enabled) .Values.externalDatabase.mountCredentialsSecret }}
@@ -339,22 +380,49 @@ same as serviceAccount.create: false).
 {{- end -}}
 
 {{/*
-Vault Agent Injector annotations for dynamic DB credential injection.
-Renders a Spring Boot .properties file to /vault/secrets/ containing
-spring.datasource.username and spring.datasource.password.
-Set externalDatabase.mountCredentialsSecret: false alongside this to prevent
-the k8s secret envFrom from taking precedence over the injected file.
+Selector labels for the optional DDI TLS proxy.
 */}}
-{{- define "hawkbit.vaultAgentAnnotations" -}}
-{{- if .Values.vaultAgent.enabled }}
-vault.hashicorp.com/agent-inject: "true"
-vault.hashicorp.com/role: {{ .Values.vaultAgent.role | quote }}
-vault.hashicorp.com/agent-inject-secret-db.properties: {{ .Values.vaultAgent.dbCredsPath | quote }}
-vault.hashicorp.com/agent-inject-template-db.properties: |
-  {{`{{- with secret "`}}{{ .Values.vaultAgent.dbCredsPath }}{{`" }}
-  spring.datasource.username={{ .Data.username }}
-  spring.datasource.password={{ .Data.password }}
-  {{- end }}`}}
-vault.hashicorp.com/agent-revoke-on-shutdown: "true"
-{{- end }}
+{{- define "hawkbit.ddiProxy.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "hawkbit.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: ddi-proxy
+{{- end -}}
+
+{{/*
+Name of the ConfigMap holding the client CA bundle for the DDI TLS proxy.
+*/}}
+{{- define "hawkbit.ddiProxy.caConfigMapName" -}}
+{{- .Values.ddiProxy.mtls.clientCa.configMapName | default (printf "%s-ddi-proxy-ca" (include "hawkbit.fullname" .)) -}}
+{{- end -}}
+
+{{/*
+Name of the Secret holding the DDI TLS proxy server certificate and key:
+secretName, else the target of the named externalSecrets entry, else a chart-created Secret.
+*/}}
+{{- define "hawkbit.ddiProxy.tlsSecretName" -}}
+{{- $t := .Values.ddiProxy.tls -}}
+{{- if $t.secretName -}}
+{{- $t.secretName -}}
+{{- else if $t.externalSecret -}}
+{{- $s := get (.Values.externalSecrets.secrets | default dict) $t.externalSecret -}}
+{{- if not (and .Values.externalSecrets.enabled (hasKey (.Values.externalSecrets.secrets | default dict) $t.externalSecret)) -}}
+{{- fail (printf "ddiProxy.tls.externalSecret %q must be an entry in externalSecrets.secrets with externalSecrets.enabled" $t.externalSecret) -}}
+{{- end -}}
+{{- (get ($s | default dict) "targetName") | default (printf "%s-secret" $t.externalSecret) -}}
+{{- else if and $t.certificate $t.key -}}
+{{- printf "%s-ddi-proxy-tls" (include "hawkbit.fullname" .) -}}
+{{- else -}}
+{{- fail "ddiProxy.tls requires secretName, externalSecret, or both certificate and key" -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Upstream host:port the DDI TLS proxy forwards to.
+*/}}
+{{- define "hawkbit.ddiProxy.upstream" -}}
+  {{- if .Values.microservices.enabled -}}
+    {{- printf "%s-ddi:8081" (include "hawkbit.fullname" .) -}}
+  {{- else -}}
+    {{- printf "%s:%v" (include "hawkbit.fullname" .) .Values.service.port -}}
+  {{- end -}}
 {{- end -}}

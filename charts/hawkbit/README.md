@@ -43,3 +43,19 @@ helm install eclipse-hawkbit eclipse-iot/hawkbit --set podDisruptionBudget.enabl
 ```
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart.
+
+### Database URL parameters
+
+When `externalDatabase.url` is empty, the JDBC URL is built from `externalDatabase.host`, `port` and `database`, with `externalDatabase.urlParams` appended as a query string. `externalDatabase.migrateUrlParams` is overlaid on `urlParams` for the db-migrate Job, so the Job can use different connection parameters.
+
+### ServiceAccounts for the db-migrate hook
+
+Set `serviceAccount.preSync: true` to create the ServiceAccounts as ArgoCD PreSync hooks, so they exist before the db-migrate Job runs.
+
+### DDI TLS proxy
+
+`ddiProxy.enabled=true` deploys an nginx proxy in front of the DDI service. It terminates TLS, optionally verifies client certificates (`ddiProxy.mtls.verifyClient`), and forwards the verified client CN and an optional issuer hash as headers. Provide the server TLS secret with `ddiProxy.tls.secretName` (existing Secret), `ddiProxy.tls.externalSecret` (an `externalSecrets.secrets` entry) or `ddiProxy.tls.certificate` and `key` (the chart creates it) and, for mTLS, the client CA bundle as `ddiProxy.mtls.clientCa.certificate` (the chart creates the ConfigMap, named by `configMapName` or `<fullname>-ddi-proxy-ca`) or the name of an existing ConfigMap in `configMapName`. One of the two is required unless `verifyClient` is `off`. Expose it with `ddiProxy.service` (type, `loadBalancerClass` and annotations). Set `ddiProxy.proxyProtocol` when the load balancer sends the PROXY protocol.
+
+### Extra objects
+
+`extraObjects` renders additional manifests with the release, for example ConfigMaps that must exist before the db-migrate Job.

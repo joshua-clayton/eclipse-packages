@@ -26,6 +26,9 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
+      {{- with (include "hawkbit.serviceAccountName" .) }}
+      serviceAccountName: {{ . }}
+      {{- end }}
       initContainers:
         - name: hawkbit-init
           image: "{{ .Values.image.initContainer }}:{{ .Values.image.tag }}"

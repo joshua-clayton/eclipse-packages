@@ -1,0 +1,64 @@
+{{- if .Values.ddiProxy.enabled }}
+{{- $p := .Values.ddiProxy }}
+{{- $clientAddr := ternary "$proxy_protocol_addr" "$remote_addr" $p.proxyProtocol }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hawkbit.fullname" . }}-ddi-proxy
+  labels:
+{{ include "hawkbit.labels" . | indent 4 }}
+    app.kubernetes.io/component: ddi-proxy
+data:
+  default.conf.template: |
+    map $ssl_client_s_dn $client_cn {
+      ~(?:^|[,/])CN=([^,/]+) $1;
+      default "";
+    }
+    map $ssl_client_verify $mtls_cn {
+      SUCCESS $client_cn;
+      default "";
+    }
+    map $ssl_client_verify $mtls_issuer_hash {
+      SUCCESS {{ $p.mtls.issuerHash | quote }};
+      default "";
+    }
+    server {
+      listen 8090;
+      access_log off;
+
+      location = /healthz {
+        return 200 "ok\n";
+      }
+    }
+    server {
+      listen 443 ssl{{ if $p.proxyProtocol }} proxy_protocol{{ end }};
+      ssl_certificate /etc/nginx/tls/tls.crt;
+      ssl_certificate_key /etc/nginx/tls/tls.key;
+      {{- if ne $p.mtls.verifyClient "off" }}
+      ssl_client_certificate /etc/nginx/ca/{{ $p.mtls.clientCa.key }};
+      {{- end }}
+      ssl_verify_client {{ $p.mtls.verifyClient }};
+      ssl_protocols TLSv1.2 TLSv1.3;
+
+      client_max_body_size {{ $p.maxBodySize }};
+      keepalive_timeout {{ $p.timeouts.keepalive }};
+
+      location / {
+        proxy_pass http://{{ include "hawkbit.ddiProxy.upstream" . }};
+        proxy_http_version 1.1;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_read_timeout {{ $p.timeouts.read }};
+        proxy_send_timeout {{ $p.timeouts.send }};
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For {{ $clientAddr }};
+        proxy_set_header X-Real-IP {{ $clientAddr }};
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Port $server_port;
+        proxy_set_header {{ $p.mtls.headers.clientCn }} $mtls_cn;
+        {{- if $p.mtls.issuerHash }}
+        proxy_set_header {{ $p.mtls.headers.issuerHash }} $mtls_issuer_hash;
+        {{- end }}
+      }
+    }
+{{- end }}

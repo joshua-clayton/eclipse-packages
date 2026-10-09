@@ -1,0 +1,112 @@
+{{- if .Values.ddiProxy.enabled }}
+{{- $p := .Values.ddiProxy }}
+{{- if and (ne $p.mtls.verifyClient "off") (not $p.mtls.clientCa.certificate) (not $p.mtls.clientCa.configMapName) }}
+{{- fail "ddiProxy.mtls.clientCa.certificate or configMapName is required unless verifyClient is off" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hawkbit.fullname" . }}-ddi-proxy
+  labels:
+{{ include "hawkbit.labels" . | indent 4 }}
+    app.kubernetes.io/component: ddi-proxy
+spec:
+  {{- if not $p.autoscaling.enabled }}
+  replicas: {{ $p.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "hawkbit.ddiProxy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "hawkbit.ddiProxy.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print .Template.BasePath "/ddi-proxy-configmap.yaml") . | sha256sum }}
+        {{- if and (not $p.tls.secretName) (not $p.tls.externalSecret) $p.tls.certificate }}
+        checksum/tls: {{ print $p.tls.certificate $p.tls.key | sha256sum }}
+        {{- end }}
+        {{- if $p.mtls.clientCa.certificate }}
+        checksum/client-ca: {{ $p.mtls.clientCa.certificate | sha256sum }}
+        {{- end }}
+        {{- with $p.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- if $p.spreadAcrossZones }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "hawkbit.ddiProxy.selectorLabels" . | nindent 14 }}
+      {{- end }}
+      {{- with $p.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $p.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $p.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: nginx
+          image: "{{ $p.image.repository }}:{{ $p.image.tag }}"
+          imagePullPolicy: {{ $p.image.pullPolicy }}
+          ports:
+            - name: https
+              containerPort: 443
+              protocol: TCP
+            - name: health
+              containerPort: 8090
+              protocol: TCP
+          {{- with $p.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: nginx-conf-template
+              mountPath: /etc/nginx/templates/default.conf.template
+              subPath: default.conf.template
+              readOnly: true
+            - name: tls
+              mountPath: /etc/nginx/tls
+              readOnly: true
+            {{- if ne $p.mtls.verifyClient "off" }}
+            - name: client-ca
+              mountPath: /etc/nginx/ca
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: nginx-conf-template
+          configMap:
+            name: {{ include "hawkbit.fullname" . }}-ddi-proxy
+        - name: tls
+          secret:
+            secretName: {{ include "hawkbit.ddiProxy.tlsSecretName" . }}
+        {{- if ne $p.mtls.verifyClient "off" }}
+        - name: client-ca
+          configMap:
+            name: {{ include "hawkbit.ddiProxy.caConfigMapName" . }}
+        {{- end }}
+{{- end }}
