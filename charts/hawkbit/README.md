@@ -48,9 +48,9 @@ Alternatively, a YAML file that specifies the values for the parameters can be p
 
 When `externalDatabase.url` is empty, the JDBC URL is built from `externalDatabase.host`, `port` and `database`, with `externalDatabase.urlParams` appended as a query string. `externalDatabase.migrateUrlParams` is overlaid on `urlParams` for the db-migrate Job, so the Job can use different connection parameters.
 
-### db-migrate Job naming
+### db-migrate Job
 
-With `job.migrate.skipIfUnchanged`, the Job is named `<fullname>-db-migrate-<appVersion>-<hash>`, where the hash covers the Job spec (including `image.tag`). The finished Job is kept and reused while the spec is unchanged; any change creates a new Job and re-runs the migration. Old Jobs are not removed.
+The Job is named `<fullname>-db-migrate` and runs as a Helm pre-install/pre-upgrade hook (ArgoCD PreSync) on every release or sync. The previous Job is deleted before a new one is created, and it is deleted again on success or failure. Set `job.migrate.enabled: false` to migrate outside the chart.
 
 ### ServiceAccounts for the db-migrate hook
 
