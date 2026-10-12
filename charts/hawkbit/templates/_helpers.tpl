@@ -227,13 +227,53 @@ Gateway token key env var, sourced from an existing secret when
 auth.gatewayToken.existingSecret is set. Omitted otherwise (the literal
 value, if any, is instead rendered into application-user-credentials.yaml).
 */}}
-{{- define "hawkbit.gatewayTokenEnv" -}}
+{{- define "hawkbit.gatewayTokenEnv" }}
+- name: HAWKBIT_SERVER_DDI_SECURITY_AUTHENTICATION_GATEWAYTOKEN_ENABLED
+  value: {{ .Values.auth.gatewayToken.enabled | ternary "true" "false" | quote }}
 {{- if and .Values.auth.gatewayToken.enabled .Values.auth.gatewayToken.existingSecret }}
 - name: HAWKBIT_SERVER_DDI_SECURITY_AUTHENTICATION_GATEWAYTOKEN_KEY
   valueFrom:
     secretKeyRef:
       name: {{ .Values.auth.gatewayToken.existingSecret }}
       key: {{ .Values.auth.gatewayToken.existingSecretKey | default "key" }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Hawkbit reads the issuer hash from a numbered header pattern (e.g. X-Ssl-Issuer-Hash-%d,
+counting from 1). The proxy sends the "-1" header, so derive the pattern from it.
+A pattern without %d would make hawkbit loop forever, hence the check.
+*/}}
+{{- define "hawkbit.issuerHashHeaderFormat" -}}
+{{- $h := .Values.auth.mtls.issuerHashHeader | default .Values.ddiProxy.mtls.headers.issuerHash }}
+{{- if contains "%d" $h -}}
+{{- $h -}}
+{{- else if hasSuffix "-1" $h -}}
+{{- trimSuffix "-1" $h }}-%d
+{{- else -}}
+{{- fail "auth.mtls.issuerHashHeader must contain %d or ddiProxy.mtls.headers.issuerHash must end in -1" }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Client-cert (header) authentication env vars, always set explicitly in hawkbit.
+The issuer hash (authority) must be known when enabled, or every request is rejected.
+*/}}
+{{- define "hawkbit.mtlsAuthEnv" -}}
+{{- $m := .Values.auth.mtls }}
+- name: HAWKBIT_SERVER_DDI_SECURITY_AUTHENTICATION_HEADER_ENABLED
+  value: {{ $m.enabled | ternary "true" "false" | quote }}
+{{- if $m.enabled }}
+{{- $hash := $m.issuerHash | default .Values.ddiProxy.mtls.issuerHash }}
+{{- if not $hash }}
+{{- fail "auth.mtls.issuerHash (or ddiProxy.mtls.issuerHash) is required when auth.mtls.enabled" }}
+{{- end }}
+- name: HAWKBIT_SERVER_DDI_SECURITY_AUTHENTICATION_HEADER_AUTHORITY
+  value: {{ $hash | quote }}
+- name: HAWKBIT_SERVER_DDI_SECURITY_RP_CNHEADER
+  value: {{ $m.cnHeader | default .Values.ddiProxy.mtls.headers.clientCn | quote }}
+- name: HAWKBIT_SERVER_DDI_SECURITY_RP_SSLISSUERHASHHEADER
+  value: {{ include "hawkbit.issuerHashHeaderFormat" . | quote }}
 {{- end }}
 {{- end -}}
 
@@ -275,6 +315,7 @@ Appends .Values.extraEnv (list of env var objects, or map of name: value) when s
   value: "false"
 {{- include "hawkbit.dbCredentialsEnv" . }}
 {{- include "hawkbit.gatewayTokenEnv" . }}
+{{- include "hawkbit.mtlsAuthEnv" . }}
 {{- if .Values.fileStorage.enabled }}
 - name: ORG_ECLIPSE_HAWKBIT_ARTIFACT_FS_PATH
   value: {{ .Values.fileStorage.mountPath }}

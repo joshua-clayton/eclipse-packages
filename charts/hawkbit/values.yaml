@@ -26,7 +26,17 @@ auth:
   username: "admin"
   password: "{noop}admin"
   dmfPassword: "[KEYCLOAK_HAWKBIT_USER_PASSWORD]"
-  # gateway token authentication
+  # Client-certificate (header) authentication for DDI controllers. Hawkbit trusts the
+  # CN/issuer headers set by the ddiProxy, so only enable it behind a verifying proxy.
+  mtls:
+    enabled: false
+    # Trusted issuer hash(es); defaults to ddiProxy.mtls.issuerHash. Required when enabled.
+    issuerHash: ""
+    # Header names hawkbit reads; default to ddiProxy.mtls.headers.
+    cnHeader: ""
+    # Numbered pattern (e.g. X-Ssl-Issuer-Hash-%d); derived from the proxy's "-1" header when empty.
+    issuerHashHeader: ""
+  # gateway token authentication; always set explicitly in hawkbit (true or false)
   gatewayToken:
     enabled: false
     name: ""
