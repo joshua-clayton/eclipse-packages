@@ -365,7 +365,7 @@ hawkbitgui:
   enabled: false
   image:
     repository: "ghcr.io/joshua-clayton/hawkbitgui"
-    tag: "5b48287"
+    tag: "383f81f"
     pullPolicy: IfNotPresent
   replicaCount: 1
   service:
